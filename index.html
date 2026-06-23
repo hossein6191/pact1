@@ -564,16 +564,18 @@ class Pact(gl.Contract):
         # separately and is allowed to vary.
         def judge_bool() -> str:
             page = gl.nondet.web.render(url, mode="text")
-            prompt = f"""You are a neutral arbitrator settling an agreement between two parties.
+            prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
 
-THE AGREEMENT (in plain language):
+THE AGREEMENT (plain language):
 {terms}
 
-EVIDENCE PAGE CONTENT:
+WHAT THE EVIDENCE PAGE ACTUALLY CONTAINS:
 {page}
 
-QUESTION: Based ONLY on the evidence page above, was the agreement fulfilled?
-Answer with ONLY one single word, lowercase, nothing else:
+Read the evidence carefully and decide: based ONLY on what is actually present on the evidence page, were the agreement's requirements met?
+Be strict and literal. If the required result is not clearly visible on the page, it is not fulfilled.
+
+Answer with ONLY one single lowercase word, nothing else:
 fulfilled
 or
 unfulfilled"""
@@ -586,8 +588,12 @@ unfulfilled"""
 
         result = gl.eq_principle.strict_eq(judge_bool)
         self.is_settled = True
-        self.verdict = "fulfilled" if result == "fulfilled" else "not_fulfilled"
-        self.last_reasoning = ""
+        if result == "fulfilled":
+            self.verdict = "fulfilled"
+            self.last_reasoning = "The jury read the evidence page and found the agreement's requirements were met."
+        else:
+            self.verdict = "not_fulfilled"
+            self.last_reasoning = "The jury read the evidence page but did not find proof the agreement was met. Check that the evidence URL points to exactly where the result should appear."
         return self.verdict
 
     @gl.public.view
@@ -648,10 +654,29 @@ unfulfilled"""
   }
   function celebrateFinal(fn){
     var s=currentStatus;
-    if(fn==="settle" && s && s.verdict==="fulfilled"){ burstConfetti(); sWin(); showToast("\u2705 Verdict finalized on-chain","FULFILLED is now fully confirmed."); }
-    else if(fn==="settle" && s && s.verdict==="not_fulfilled"){ showToast("\u2705 Verdict finalized","NOT FULFILLED is now fully confirmed."); }
-    else if(fn==="sign"){ showToast("\u2705 Signatures finalized","The pact is fully confirmed on-chain."); }
+    if(fn==="settle" && s && s.verdict==="fulfilled"){ burstConfetti(); sWin(); showFinalizeSticker("fulfilled"); showToast("\u2705 Verdict finalized on-chain","FULFILLED is now fully confirmed."); }
+    else if(fn==="settle" && s && s.verdict==="not_fulfilled"){ showFinalizeSticker("not_fulfilled"); showToast("\u2705 Verdict finalized","NOT FULFILLED is now fully confirmed."); }
+    else if(fn==="sign"){ burstConfetti(); showFinalizeSticker("sign"); showToast("\u2705 Signatures finalized","The pact is fully confirmed on-chain."); }
   }
+  function showFinalizeSticker(kind){
+    var w=document.createElement("div");
+    w.className="wait-sticker-wrap";
+    var msg = kind==="fulfilled" ? "sealed &amp; finalized! \uD83C\uDF89" : (kind==="sign" ? "signatures locked in! \u270D" : "finalized on-chain \u2696");
+    w.innerHTML='<img class="wait-sticker" src="'+COOKIE_IMG+'" alt="" /><div class="wait-bubble"><b>'+msg+'</b></div>';
+    document.body.appendChild(w);
+    setTimeout(function(){ if(w&&w.parentNode){ w.style.transition="opacity .5s"; w.style.opacity="0"; setTimeout(function(){ if(w.parentNode)w.remove(); },500); } },5500);
+  }
+  function showReasonNote(text,kind){
+    if(!text){ clearReasonNote(); return; }
+    var el=document.getElementById("reasonNote");
+    if(!el){ el=document.createElement("div"); el.id="reasonNote"; el.className="tn-note"; var vb=$("verdictBanner"); vb.parentNode.insertBefore(el, vb.nextSibling); }
+    el.style.background = kind==="fulfilled" ? "rgba(40,210,130,.08)" : "rgba(255,90,70,.08)";
+    el.style.borderColor = kind==="fulfilled" ? "rgba(126,240,176,.3)" : "rgba(255,90,70,.3)";
+    el.style.color = kind==="fulfilled" ? "var(--ok)" : "var(--bad)";
+    var extra = kind==="fulfilled" ? "" : " a \u201cnot fulfilled\u201d verdict doesn\u2019t always mean someone failed. it can also mean the evidence link didn\u2019t point to where the result actually shows up, or the page couldn\u2019t be fully read.";
+    el.innerHTML='<b>Why this verdict?</b> '+text+extra;
+  }
+  function clearReasonNote(){ var el=document.getElementById("reasonNote"); if(el)el.remove(); }
   function showFinalizingNote(msg){
     var el=document.getElementById("finalNote");
     if(!el){ el=document.createElement("div"); el.id="finalNote"; el.className="tx-track"; var mt=$("ratingMount"); mt.parentNode.insertBefore(el,mt); }
@@ -1004,6 +1029,7 @@ unfulfilled"""
       if(s.verdict==="cancelled"){ b.classList.add("v-warn"); b.textContent="\u2715 This pact was cancelled."; clearFinalizingNote(); }
       else if(s.verdict==="fulfilled"){ b.classList.add("v-ok"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The FULFILLED ruling is recorded on-chain and is being finalized. On Bradbury this can take a while \u2014 it stays valid."); else clearFinalizingNote(); }
       else { b.classList.add("v-bad"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>NOT FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The NOT FULFILLED ruling is recorded on-chain and is being finalized. On Bradbury this can take a while \u2014 it stays valid."); else clearFinalizingNote(); }
+      if(s.verdict==="cancelled") clearReasonNote(); else showReasonNote(s.last_reasoning||"", s.verdict);
       $("signBtn").classList.add("hidden");$("settleBtn").disabled=true;$("cancelBtn").disabled=true;
       stopAuto();
       if(!(prev&&prev.is_settled)){
@@ -1016,13 +1042,14 @@ unfulfilled"""
       b.classList.add("v-idle");
       b.innerHTML="\u2713 <b>Active</b> \u2014 both parties signed."+(signProvisional?" <span style='opacity:.85;margin-left:6px'>finalizing\u2026</span>":"")+" It can be settled after the deadline.";
       if(signProvisional)showFinalizingNote("Both signatures are recorded on-chain and being finalized. The pact is active either way."); else clearFinalizingNote();
+      clearReasonNote();
       $("signBtn").classList.add("hidden");
       const past=(Date.now()/1000)>=Number(s.deadline);
       $("settleBtn").disabled=!past; $("settleBtn").title=past?"":"Available after the deadline";
       $("cancelBtn").disabled=true;
       if(prev && !prev.is_active){ burstConfetti(); sWin(); }
     }else{
-      pill("drafted").classList.add("on"); clearFinalizingNote();
+      pill("drafted").classList.add("on"); clearFinalizingNote(); clearReasonNote();
       b.classList.add("v-idle");
       if(role==="A"){ b.innerHTML="\u270D You've signed as <b>Party A</b>. Now <b>Party B</b> must open this pact and sign. Share the address with them."; }
       else if(role==="B"){ b.innerHTML="\u270D You're <b>Party B</b>. Review &amp; sign below to make this pact active."; }
