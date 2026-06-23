@@ -618,6 +618,75 @@ unfulfilled"""
   const short=(a)=>a?a.slice(0,6)+"\u2026"+a.slice(-4):"";
   function fmtDate(ts){try{return new Date(ts*1000).toLocaleString();}catch(e){return String(ts);}}
   function setStatus(el,msg,busy){el.classList.remove("hidden");el.innerHTML=(busy?'<span class="spinner"></span>':'')+msg;}
+  function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+
+  /* ---- sync helpers: the CONTRACT is the source of truth ---- */
+  function stateKey(s){return JSON.stringify([s.signed_a,s.signed_b,s.is_active,s.is_settled,s.verdict,s.is_minted]);}
+  function walletRole(s){
+    if(!account||!s)return "observer";
+    var a=account.toLowerCase();
+    if(s.party_a && a===String(s.party_a).toLowerCase())return "A";
+    if(s.party_b && a===String(s.party_b).toLowerCase())return "B";
+    return "observer";
+  }
+  function expectedReached(fnName,s){
+    if(fnName==="sign")return s.signed_b===true;
+    if(fnName==="settle")return s.is_settled===true;
+    if(fnName==="cancel")return s.is_settled===true;
+    return false;
+  }
+  // provisional = on-chain change has landed (accepted) but not yet FINALIZED
+  var provis={};
+  function trackProvisional(fn,tx){ provis[loadedContract]={fn:fn,tx:tx,final:false}; }
+  function watchFinalization(tx,fn,addr){
+    try{
+      var c=createClient({chain:CHAIN});
+      c.waitForTransactionReceipt({hash:tx,status:TransactionStatus.FINALIZED,retries:400,interval:6000})
+        .then(function(){ var p=provis[addr]; if(p&&p.tx===tx){p.final=true;} if(loadedContract===addr){ loadStatus(true); celebrateFinal(fn); } })
+        .catch(function(){});
+    }catch(e){}
+  }
+  function celebrateFinal(fn){
+    var s=currentStatus;
+    if(fn==="settle" && s && s.verdict==="fulfilled"){ burstConfetti(); sWin(); showToast("\u2705 Verdict finalized on-chain","FULFILLED is now fully confirmed."); }
+    else if(fn==="settle" && s && s.verdict==="not_fulfilled"){ showToast("\u2705 Verdict finalized","NOT FULFILLED is now fully confirmed."); }
+    else if(fn==="sign"){ showToast("\u2705 Signatures finalized","The pact is fully confirmed on-chain."); }
+  }
+  function showFinalizingNote(msg){
+    var el=document.getElementById("finalNote");
+    if(!el){ el=document.createElement("div"); el.id="finalNote"; el.className="tx-track"; var mt=$("ratingMount"); mt.parentNode.insertBefore(el,mt); }
+    el.innerHTML='<div class="row1"><span class="tx-stage-dot"></span><span class="tx-stage-txt">Finalizing on-chain\u2026</span></div>'+
+      '<div class="tx-sub">'+(msg||"Recorded and being finalized by the network. On Bradbury this can take a while \u2014 it stays valid, and you can safely leave this page.")+'</div>'+
+      '<div class="tx-bar"><i></i></div>';
+  }
+  function clearFinalizingNote(){ var el=document.getElementById("finalNote"); if(el)el.remove(); }
+  async function waitForStateChange(fnName,beforeKey,maxPolls){
+    var readClient=createClient({chain:CHAIN});
+    for(var i=0;i<maxPolls;i++){
+      await sleep(4000);
+      try{
+        var raw=await readClient.readContract({address:loadedContract,functionName:"get_status",args:[]});
+        var s=typeof raw==="string"?JSON.parse(raw):raw;
+        renderStatus(s);
+        if(expectedReached(fnName,s)) return true;
+      }catch(e){}
+    }
+    return false;
+  }
+  function handleTxError(err,target){
+    var m=err&&err.message||String(err);
+    var el=$(target);
+    if(m.includes("deadline has not"))setStatus(el,"\u25F7 The deadline hasn't passed yet, so it can't be settled. Come back after the deadline.");
+    else if(m.includes("Both parties must sign"))setStatus(el,"\u2717 Both parties must sign before the pact can be judged.");
+    else if(m.includes("already signed"))setStatus(el,"You've already signed this pact \u2014 it's the other party's turn now.");
+    else if(m.includes("Only the counterparty"))setStatus(el,"\u2717 Only the counterparty's wallet (Party B) can sign. Switch to that account in your wallet.");
+    else if(m.includes("already settled"))setStatus(el,"This pact is already settled \u2014 nothing more to do.");
+    else if(m.includes("cannot be cancelled"))setStatus(el,"This pact is already active and can't be cancelled.");
+    else if(m.includes("Only a party"))setStatus(el,"\u2717 Only a party to this pact can cancel it.");
+    else if(m.includes("insufficient")||m.includes("funds"))setStatus(el,"\u2717 Not enough testnet GEN for gas. Get free tokens from the GenLayer faucet, then try again.");
+    else if(m.includes("rejected")||m.includes("4001"))setStatus(el,"\u2717 You rejected the transaction in your wallet. Nothing happened.");
+    else setStatus(el,"\u2717 "+m+"\n\n"+tnNote());
+  }
 
   /* ---------------- sound engine (WebAudio, no files) ---------------- */
   let actx=null, soundOn=true;
@@ -855,12 +924,12 @@ unfulfilled"""
       let addr=r.contractAddress||r.contract_address||d.contractAddress||d.contract_address||d.recipient||d.to_address||r.recipient||r.to_address||null;
       if(!addr){try{const tx=await client.getTransaction({hash:txHash});addr=tx&&(tx.contractAddress||tx.recipient||tx.to_address||(tx.data&&(tx.data.recipient||tx.data.to_address)))||null;}catch(e){}}
       if(addr){
-        setStatus($("createStatus"),"\u2713 Pact created and signed by you.\nContract address:\n"+addr+"\n\nSend this address to the other party so they can sign.\n"+exLink(txHash));
+        setStatus($("createStatus"),"\u2713 Pact created \u2014 you've signed as Party A.\nContract address:\n"+addr+"\n\nNow send this address to Party B so they can open it and sign. The pact only goes live once they sign too.\n"+exLink(txHash));
         sChime();
         $("f_contract").value=addr;
         setTimeout(()=>{loadStatus();startAuto();},900);
         $("manageCard").scrollIntoView({behavior:"smooth"});
-        showToast("You've signed \u270D","Now the other party needs to sign for it to go live.");
+        showToast("You've signed as Party A \u270D","Now Party B needs to open the pact and sign.");
       }else{
         setStatus($("createStatus"),"\u2713 Pact created on-chain.\nThe address wasn't returned here, but it exists.\nOpen the explorer, copy the CONTRACT_DEPLOYMENT address, and paste it below.\n"+exLink(txHash));
       }
@@ -906,51 +975,62 @@ unfulfilled"""
 
   function renderStatus(s){
     const prev=currentStatus; currentStatus=s;
+    const role=walletRole(s);
     const grid=$("statusGrid");grid.innerHTML="";
     const rows=[["Agreement",s.terms],["Party A",s.party_a],["Party B",s.party_b],
       ["A identity",s.identity_a],["B identity",s.identity_b],["Evidence URL",s.evidence_url],
       ["Deadline",fmtDate(s.deadline)],["A signed",s.signed_a?"yes":"no"],["B signed",s.signed_b?"yes":"no"],
       ["Active",s.is_active?"yes":"no"],["Settled",s.is_settled?"yes":"no"],
       ["Verdict",s.verdict||"\u2014"],
-      ["Signature token",s.is_minted?(s.token_id||"minted"):"not yet"]];
+      ["Signature token",s.is_minted?(s.token_id||"minted"):"not yet"],
+      ["You are",role==="A"?"Party A (creator)":role==="B"?"Party B (counterparty)":"an observer"]];
     for(const kv of rows){const dt=document.createElement("dt");dt.textContent=kv[0];const dd=document.createElement("dd");dd.textContent=kv[1];grid.appendChild(dt);grid.appendChild(dd);}
 
-    // nft card
     const nft=$("nftCard");
-    if(s.is_minted && s.token_id){
-      $("nftId").textContent=s.token_id; $("nftA").textContent=short(s.party_a); $("nftB").textContent=short(s.party_b);
-      if(!(prev&&prev.is_minted)) nft.classList.remove("hidden");
-      nft.classList.remove("hidden");
-    }else nft.classList.add("hidden");
+    if(s.is_minted && s.token_id){ $("nftId").textContent=s.token_id; $("nftA").textContent=short(s.party_a); $("nftB").textContent=short(s.party_b); nft.classList.remove("hidden"); }
+    else nft.classList.add("hidden");
 
-    // step pills
     document.querySelectorAll("#stepPills span").forEach(x=>x.classList.remove("on","done"));
     const pill=(n)=>document.querySelector('#stepPills [data-s="'+n+'"]');
     const b=$("verdictBanner");b.className="verdict";
 
+    const p=provis[loadedContract];
+    const settleProvisional = s.is_settled && p && p.fn==="settle" && !p.final;
+    const signProvisional = s.is_active && !s.is_settled && p && p.fn==="sign" && !p.final;
+    const tail=(prov)=> prov ? " <span style='font-weight:500;opacity:.85;margin-left:8px'>\u00b7 finalizing\u2026</span>" : " <span style='font-weight:500;color:var(--ok);margin-left:8px'>\u00b7 confirmed</span>";
+
     if(s.is_settled){
       pill("drafted").classList.add("done");pill("signed").classList.add("done");pill("active").classList.add("done");pill("settled").classList.add("on");
-      if(s.verdict==="fulfilled"){ b.classList.add("v-ok"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>FULFILLED</b>"; }
-      else if(s.verdict==="cancelled"){ b.classList.add("v-warn"); b.textContent="\u2715 This pact was cancelled."; }
-      else { b.classList.add("v-bad"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>NOT FULFILLED</b>"; }
-      $("signBtn").disabled=true;$("settleBtn").disabled=true;$("cancelBtn").disabled=true;
+      if(s.verdict==="cancelled"){ b.classList.add("v-warn"); b.textContent="\u2715 This pact was cancelled."; clearFinalizingNote(); }
+      else if(s.verdict==="fulfilled"){ b.classList.add("v-ok"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The FULFILLED ruling is recorded on-chain and is being finalized. On Bradbury this can take a while \u2014 it stays valid."); else clearFinalizingNote(); }
+      else { b.classList.add("v-bad"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>NOT FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The NOT FULFILLED ruling is recorded on-chain and is being finalized. On Bradbury this can take a while \u2014 it stays valid."); else clearFinalizingNote(); }
+      $("signBtn").classList.add("hidden");$("settleBtn").disabled=true;$("cancelBtn").disabled=true;
       stopAuto();
-      // celebrate / inform once, when transitioning into settled
       if(!(prev&&prev.is_settled)){
-        if(s.verdict==="fulfilled"){ burstConfetti(); sWin(); showToast("\uD83C\uDF89 Agreement fulfilled!","The AI jury read the evidence and ruled in favor."); }
-        else if(s.verdict==="cancelled"){ showToast("Pact cancelled","The agreement was closed before going active."); }
-        else { sFail(); showToast("Ruled: not fulfilled","The jury didn't find enough evidence the deal was kept."); }
+        if(s.verdict==="fulfilled"){ burstConfetti(); sWin(); }
+        else if(s.verdict!=="cancelled"){ sFail(); }
         mountRating();
       } else { mountRating(); }
     }else if(s.is_active){
       pill("drafted").classList.add("done");pill("signed").classList.add("done");pill("active").classList.add("on");
-      b.classList.add("v-idle");b.textContent="\u2713 Active \u2014 both signed. Can be settled after the deadline.";
-      $("signBtn").disabled=true;$("settleBtn").disabled=false;$("cancelBtn").disabled=true;
-      if(prev && !prev.is_active){ burstConfetti(); sWin(); showToast("\uD83E\uDD1D Pact is live!","Both parties signed. The signature token is minted."); }
+      b.classList.add("v-idle");
+      b.innerHTML="\u2713 <b>Active</b> \u2014 both parties signed."+(signProvisional?" <span style='opacity:.85;margin-left:6px'>finalizing\u2026</span>":"")+" It can be settled after the deadline.";
+      if(signProvisional)showFinalizingNote("Both signatures are recorded on-chain and being finalized. The pact is active either way."); else clearFinalizingNote();
+      $("signBtn").classList.add("hidden");
+      const past=(Date.now()/1000)>=Number(s.deadline);
+      $("settleBtn").disabled=!past; $("settleBtn").title=past?"":"Available after the deadline";
+      $("cancelBtn").disabled=true;
+      if(prev && !prev.is_active){ burstConfetti(); sWin(); }
     }else{
-      pill("drafted").classList.add("on");
-      b.classList.add("v-idle");b.textContent="\u25F7 Drafted \u2014 waiting for the counterparty to sign.";
-      $("signBtn").disabled=false;$("settleBtn").disabled=true;$("cancelBtn").disabled=false;
+      pill("drafted").classList.add("on"); clearFinalizingNote();
+      b.classList.add("v-idle");
+      if(role==="A"){ b.innerHTML="\u270D You've signed as <b>Party A</b>. Now <b>Party B</b> must open this pact and sign. Share the address with them."; }
+      else if(role==="B"){ b.innerHTML="\u270D You're <b>Party B</b>. Review &amp; sign below to make this pact active."; }
+      else { b.textContent="\u25F7 Drafted \u2014 waiting for the counterparty (Party B) to sign."; }
+      if(role==="B"){ $("signBtn").classList.remove("hidden"); $("signBtn").disabled=false; }
+      else { $("signBtn").classList.add("hidden"); }
+      $("settleBtn").disabled=true;
+      $("cancelBtn").disabled=!(role==="A"||role==="B");
     }
   }
 
@@ -963,13 +1043,16 @@ unfulfilled"""
   $("signBtn").addEventListener("click",()=>{
     if(needWallet())return;
     if(!currentStatus){alert("Load a pact first.");return;}
+    const role=walletRole(currentStatus);
+    if(currentStatus.signed_b){ alert("Party B has already signed this pact \u2014 it's now active or settled. You don't need to sign again."); return; }
+    if(role!=="B"){ alert("Only the counterparty (Party B) can sign this pact.\n\nThis pact's Party B is:\n"+currentStatus.party_b+"\n\nSwitch to that wallet in Rabby, reconnect, then load the pact again."); return; }
     paperMode="sign";
     openPaper({terms:currentStatus.terms,a:currentStatus.party_a,b:currentStatus.party_b,
       evidence:currentStatus.evidence_url,deadlineText:fmtDate(currentStatus.deadline)});
   });
   async function doSign(){
     closePaper();
-    await runWrite("sign","You've signed. If both parties have now signed, the pact is live and a signature token is minted.","Signed \u270D","Both sides signed \u2014 the signature token is minted.");
+    await runWrite("sign",{ok:"You've signed. Once the network confirms, the pact becomes active and the signature token is minted."},false);
   }
 
   /* ---------------- settle (with judge overlay) ---------------- */
@@ -983,44 +1066,51 @@ unfulfilled"""
   function hideJudge(){ if(judgeTimer)clearInterval(judgeTimer); $("judgeOverlay").classList.add("hidden"); }
 
   $("settleBtn").addEventListener("click",()=>{
-    const ok=confirm("SETTLE THIS PACT\n\nThis asks the AI jury to read the evidence page and rule whether the agreement was kept.\n\nIt only works after the deadline, and only if both parties signed.\n\nProceed?");
-    if(ok) runWrite("settle","The jury has ruled. See the verdict above.","The jury has spoken \u2696","The verdict is now recorded on-chain.",true);
+    if(!currentStatus){alert("Load a pact first.");return;}
+    if(!currentStatus.is_active){ alert("This pact isn't active yet. Both parties must sign before it can be settled."); return; }
+    const past=(Date.now()/1000)>=Number(currentStatus.deadline);
+    if(!past){ alert("This pact can only be settled after its deadline:\n"+fmtDate(currentStatus.deadline)); return; }
+    const ok=confirm("SETTLE THIS PACT\n\nThis asks the AI jury to read the evidence page and rule whether the agreement was kept.\n\nProceed?");
+    if(ok) runWrite("settle",{ok:"The jury has ruled. See the verdict above."},true);
   });
   $("cancelBtn").addEventListener("click",()=>{
+    if(!currentStatus){alert("Load a pact first.");return;}
     const ok=confirm("CANCEL THIS PACT\n\nThis permanently cancels the pact. Only possible before it's active (before both have signed).\n\nThis cannot be undone. Are you sure?");
-    if(ok) runWrite("cancel","Pact cancelled.","Pact cancelled","The agreement is now permanently closed.");
+    if(ok) runWrite("cancel",{ok:"Pact cancelled."},false);
   });
 
-  async function runWrite(fnName,okMsg,toastBig,toastSmall,isSettle){
+  async function runWrite(fnName,labels,isSettle){
     if(needWallet())return;
     if(!loadedContract){alert("Load a pact first.");return;}
+    const before = currentStatus ? stateKey(currentStatus) : null;
+    const addr = loadedContract;
     setStatus($("actionStatus"),"Confirm in your wallet\u2026",true);
     showTracker("actionTx","Waiting for your wallet\u2026","");
     if(isSettle) showJudge();
+    let txHash=null;
     try{
       const client=await freshClient();
-      const txHash=await client.writeContract({address:loadedContract,functionName:fnName,args:[],value:0});
-      setStatus($("actionStatus"),(isSettle?"The jury is deliberating\u2026":"Sent. Validators are voting\u2026"),true);
-      showTracker("actionTx",(isSettle?"Jury deliberating \u00b7 reading evidence\u2026":"Validators voting\u2026"),txHash);
+      txHash=await client.writeContract({address:addr,functionName:fnName,args:[],value:0});
+      trackProvisional(fnName,txHash);
+      watchFinalization(txHash,fnName,addr);
+      showTracker("actionTx",(isSettle?"Jury deliberating \u00b7 reading the evidence\u2026":"Validators voting on your transaction\u2026"),txHash);
       if(!isSettle) showWait();
-      await client.waitForTransactionReceipt({hash:txHash,status:TransactionStatus.ACCEPTED,retries:240,interval:5000});
-      hideWait(); hideJudge(); clearTracker("actionTx");
-      setStatus($("actionStatus"),"\u2713 "+okMsg+"\n"+exLink(txHash));
-      if(toastBig)showToast(toastBig,toastSmall);
-      setTimeout(()=>loadStatus(),1400);
+      setStatus($("actionStatus"),(isSettle?"The jury is deliberating. This can take a few minutes on Bradbury \u2014 keep this tab open.":"Sent. The network is reaching consensus\u2026"),true);
     }catch(err){
       hideWait(); hideJudge(); clearTracker("actionTx");
-      const m=err&&err.message||String(err);
-      if(m.includes("deadline has not"))setStatus($("actionStatus"),"\u25F7 The deadline hasn't passed yet, so it can't be settled. Come back after the deadline.");
-      else if(m.includes("Both parties must sign"))setStatus($("actionStatus"),"\u2717 Both parties must sign before the pact can be judged.");
-      else if(m.includes("already signed"))setStatus($("actionStatus"),"You've already signed this pact.");
-      else if(m.includes("Only the counterparty"))setStatus($("actionStatus"),"\u2717 Only the counterparty's wallet can sign. Switch to that account in your wallet.");
-      else if(m.includes("already settled"))setStatus($("actionStatus"),"This pact is already settled \u2014 nothing more to do.");
-      else if(m.includes("cannot be cancelled"))setStatus($("actionStatus"),"This pact is already active and can't be cancelled.");
-      else if(m.includes("Only a party"))setStatus($("actionStatus"),"\u2717 Only a party to this pact can cancel it.");
-      else if(m.includes("insufficient")||m.includes("funds"))setStatus($("actionStatus"),"\u2717 Not enough testnet GEN for gas. Get free tokens from the GenLayer faucet, then try again.");
-      else if(m.includes("rejected")||m.includes("4001"))setStatus($("actionStatus"),"\u2717 You rejected the transaction in your wallet. Nothing happened.");
-      else setStatus($("actionStatus"),"\u2717 "+m+"\n\n"+tnNote());
+      return handleTxError(err,"actionStatus");
+    }
+    // Poll the CONTRACT STATE (source of truth) until the change actually lands on-chain
+    const changed = await waitForStateChange(fnName,before,75);
+    hideWait(); hideJudge();
+    if(changed){
+      clearTracker("actionTx");
+      setStatus($("actionStatus"),"\u2713 "+labels.ok+"\n"+exLink(txHash));
+      await loadStatus(true);
+    }else{
+      showTracker("actionTx","Still working \u00b7 the testnet may be slow or timing out",txHash||"");
+      setStatus($("actionStatus"),"\u23F3 This is taking longer than usual. The transaction may still land, or the testnet may have timed out.\nThe page keeps checking automatically and will update the moment it does. You can also try the same action again in a minute.\n"+(txHash?exLink(txHash):"")+"\n\n"+tnNote(),false);
+      startAuto();
     }
   }
 
