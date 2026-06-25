@@ -677,11 +677,34 @@ unfulfilled"""
     el.innerHTML='<b>Why this verdict?</b> '+text+extra;
   }
   function clearReasonNote(){ var el=document.getElementById("reasonNote"); if(el)el.remove(); }
+  function showResultModal(verdict,reasoning){
+    if(document.getElementById("resultModal"))return;
+    var ok=verdict==="fulfilled", cancelled=verdict==="cancelled";
+    var title=cancelled?"Pact cancelled":(ok?"Agreement fulfilled! \uD83C\uDF89":"Ruled: not fulfilled");
+    var color=cancelled?"var(--warn)":(ok?"var(--ok)":"var(--bad)");
+    var body=cancelled
+      ? "This pact was cancelled before going active. Nothing else to do here."
+      : (ok
+         ? "Both parties signed, then the AI jury read the evidence online and ruled the agreement was kept. The verdict is now recorded on-chain."
+         : "The AI jury read the evidence but didn't find proof the agreement was met. That can also mean the evidence link didn't point to where the result actually shows up.");
+    var w=document.createElement("div"); w.id="resultModal"; w.className="paper-back";
+    w.innerHTML='<div style="background:linear-gradient(160deg,#13142e,#0a0b1a);border:1px solid var(--line);border-radius:22px;max-width:440px;width:100%;padding:30px;text-align:center;box-shadow:0 30px 90px rgba(0,0,0,.7);animation:pop .4s cubic-bezier(.34,1.56,.64,1)">'+
+      '<img src="'+COOKIE_IMG+'" alt="" style="width:118px;height:118px;object-fit:contain;filter:drop-shadow(0 12px 30px rgba(143,123,255,.4))" />'+
+      '<div style="font-size:23px;font-weight:850;margin-top:8px;color:'+color+'">'+title+'</div>'+
+      '<div style="color:var(--muted);font-size:14px;margin-top:10px;line-height:1.7">'+body+'</div>'+
+      (reasoning?'<div style="margin-top:12px;font-size:13px;color:var(--ink);font-style:italic;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:11px;line-height:1.6">\u201c'+reasoning+'\u201d</div>':'')+
+      '<div style="margin-top:14px;font-size:12px;color:var(--warn);background:rgba(255,210,122,.08);border:1px solid rgba(255,210,122,.25);border-radius:10px;padding:10px;line-height:1.6">full on-chain finalization usually takes around 30 minutes on Bradbury. the verdict is already valid \u2014 you can leave the page.</div>'+
+      '<button class="gotit" style="margin-top:18px" id="resultClose">Nice</button>'+
+      '</div>';
+    document.body.appendChild(w);
+    document.getElementById("resultClose").onclick=function(){ w.remove(); };
+    w.addEventListener("click",function(e){ if(e.target===w) w.remove(); });
+  }
   function showFinalizingNote(msg){
     var el=document.getElementById("finalNote");
     if(!el){ el=document.createElement("div"); el.id="finalNote"; el.className="tx-track"; var mt=$("ratingMount"); mt.parentNode.insertBefore(el,mt); }
     el.innerHTML='<div class="row1"><span class="tx-stage-dot"></span><span class="tx-stage-txt">Finalizing on-chain\u2026</span></div>'+
-      '<div class="tx-sub">'+(msg||"Recorded and being finalized by the network. On Bradbury this can take a while \u2014 it stays valid, and you can safely leave this page.")+'</div>'+
+      '<div class="tx-sub">'+(msg||"Recorded and being finalized by the network. On Bradbury this usually takes around 30 minutes \u2014 it stays valid, and you can safely leave this page.")+'</div>'+
       '<div class="tx-bar"><i></i></div>';
   }
   function clearFinalizingNote(){ var el=document.getElementById("finalNote"); if(el)el.remove(); }
@@ -728,7 +751,7 @@ unfulfilled"""
       o.start(); o.stop(a.currentTime+(dur||0.12));
     }catch(e){}
   }
-  function sClick(){ blip(420,0.07,"triangle",0.05); }
+  function sClick(){ blip(480,0.045,"sine",0.03); }
   function sChime(){ blip(660,0.12,"sine",0.06); setTimeout(()=>blip(880,0.16,"sine",0.06),90); setTimeout(()=>blip(1175,0.22,"sine",0.05),190); }
   function sWin(){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>blip(f,0.2,"sine",0.07),i*110)); }
   function sFail(){ blip(300,0.18,"sawtooth",0.05); setTimeout(()=>blip(200,0.26,"sawtooth",0.05),120); }
@@ -970,7 +993,7 @@ unfulfilled"""
   function tnNote(){ return '<div class="tn-note"><b>Seeing an error or timeout?</b> Bradbury is an early testnet and its validators sometimes time out or return an error even when your input is fine. If that happens, just try the same action again in a minute \u2014 it usually goes through.</div>'; }
 
   /* ---------------- load / status (+ auto refresh) ---------------- */
-  $("loadBtn").addEventListener("click",()=>{ loadStatus(); startAuto(); });
+  $("loadBtn").addEventListener("click",()=>{ if(needWallet())return; loadStatus(); startAuto(); });
   $("autoBtn").addEventListener("click",()=>{ autoOn?stopAuto():startAuto(); });
   function startAuto(){
     autoOn=true; $("autoBtn").classList.remove("hidden");
@@ -1027,21 +1050,22 @@ unfulfilled"""
     if(s.is_settled){
       pill("drafted").classList.add("done");pill("signed").classList.add("done");pill("active").classList.add("done");pill("settled").classList.add("on");
       if(s.verdict==="cancelled"){ b.classList.add("v-warn"); b.textContent="\u2715 This pact was cancelled."; clearFinalizingNote(); }
-      else if(s.verdict==="fulfilled"){ b.classList.add("v-ok"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The FULFILLED ruling is recorded on-chain and is being finalized. On Bradbury this can take a while \u2014 it stays valid."); else clearFinalizingNote(); }
-      else { b.classList.add("v-bad"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>NOT FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The NOT FULFILLED ruling is recorded on-chain and is being finalized. On Bradbury this can take a while \u2014 it stays valid."); else clearFinalizingNote(); }
+      else if(s.verdict==="fulfilled"){ b.classList.add("v-ok"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The FULFILLED ruling is recorded on-chain and is being finalized. On Bradbury this usually takes around 30 minutes \u2014 it stays valid, and you can leave the page."); else clearFinalizingNote(); }
+      else { b.classList.add("v-bad"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>NOT FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The NOT FULFILLED ruling is recorded on-chain and is being finalized. On Bradbury this usually takes around 30 minutes \u2014 it stays valid, and you can leave the page."); else clearFinalizingNote(); }
       if(s.verdict==="cancelled") clearReasonNote(); else showReasonNote(s.last_reasoning||"", s.verdict);
       $("signBtn").classList.add("hidden");$("settleBtn").disabled=true;$("cancelBtn").disabled=true;
       stopAuto();
       if(!(prev&&prev.is_settled)){
         if(s.verdict==="fulfilled"){ burstConfetti(); sWin(); }
         else if(s.verdict!=="cancelled"){ sFail(); }
+        showResultModal(s.verdict, s.last_reasoning||"");
         mountRating();
       } else { mountRating(); }
     }else if(s.is_active){
       pill("drafted").classList.add("done");pill("signed").classList.add("done");pill("active").classList.add("on");
       b.classList.add("v-idle");
-      b.innerHTML="\u2713 <b>Active</b> \u2014 both parties signed."+(signProvisional?" <span style='opacity:.85;margin-left:6px'>finalizing\u2026</span>":"")+" It can be settled after the deadline.";
-      if(signProvisional)showFinalizingNote("Both signatures are recorded on-chain and being finalized. The pact is active either way."); else clearFinalizingNote();
+      b.textContent="\u2713 Active \u2014 both parties signed."+(signProvisional?" finalizing\u2026":"")+" It can be settled after the deadline.";
+      if(signProvisional)showFinalizingNote("Both signatures are recorded on-chain and being finalized (usually ~30 min on Bradbury). The pact is active either way."); else clearFinalizingNote();
       clearReasonNote();
       $("signBtn").classList.add("hidden");
       const past=(Date.now()/1000)>=Number(s.deadline);
@@ -1051,8 +1075,8 @@ unfulfilled"""
     }else{
       pill("drafted").classList.add("on"); clearFinalizingNote(); clearReasonNote();
       b.classList.add("v-idle");
-      if(role==="A"){ b.innerHTML="\u270D You've signed as <b>Party A</b>. Now <b>Party B</b> must open this pact and sign. Share the address with them."; }
-      else if(role==="B"){ b.innerHTML="\u270D You're <b>Party B</b>. Review &amp; sign below to make this pact active."; }
+      if(role==="A"){ b.textContent="\u270D You've signed as Party A. Now Party B must open this pact and sign \u2014 share the address with them."; }
+      else if(role==="B"){ b.textContent="\u270D You're Party B. Review & sign below to make this pact active."; }
       else { b.textContent="\u25F7 Drafted \u2014 waiting for the counterparty (Party B) to sign."; }
       if(role==="B"){ $("signBtn").classList.remove("hidden"); $("signBtn").disabled=false; }
       else { $("signBtn").classList.add("hidden"); }
@@ -1229,7 +1253,7 @@ unfulfilled"""
   function hideWelcome(){$("welcomeModal").classList.add("hidden");try{localStorage.setItem("pact_seen","1");}catch(e){}}
   $("welcomeGotit").addEventListener("click",hideWelcome);
   $("welcomeModal").addEventListener("click",(e)=>{if(e.target.id==="welcomeModal")hideWelcome();});
-  try{if(!localStorage.getItem("pact_seen"))showWelcome();}catch(e){showWelcome();}
+  showWelcome();
 
 </script>
 </body>
