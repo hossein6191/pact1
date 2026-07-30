@@ -363,6 +363,8 @@
       <button id="loadBtn" class="btn-primary">Load pact</button>
       <button id="autoBtn" class="btn-ghost hidden">&#128260; Auto-refresh: on</button>
     </div>
+    <div class="actions" id="demoRow"></div>
+    <div id="demoNote"></div>
 
     <div id="statusPanel" class="hidden">
       <div class="step-pills" id="stepPills">
@@ -993,7 +995,36 @@ unfulfilled"""
   function tnNote(){ return '<div class="tn-note"><b>Seeing an error or timeout?</b> Bradbury is an early testnet and its validators sometimes time out or return an error even when your input is fine. If that happens, just try the same action again in a minute \u2014 it usually goes through.</div>'; }
 
   /* ---------------- load / status (+ auto refresh) ---------------- */
-  $("loadBtn").addEventListener("click",()=>{ if(needWallet())return; loadStatus(); startAuto(); });
+  $("loadBtn").addEventListener("click",()=>{ if(needWallet())return; clearDemoNote(); loadStatus(); startAuto(); });
+
+  /* ---- demo pacts: real, already-completed pacts anyone can inspect read-only ---- */
+  const DEMOS=[
+    {addr:"0x24052Dd08728ceED8DC3640D52e01Cc683b93596", label:"\uD83D\uDC40 View a real completed pact", kind:"settled"}
+  ];
+  function showDemoNote(kind){
+    const el=$("demoNote");
+    el.innerHTML='<div class="tn-note" style="background:rgba(143,123,255,.08);border-color:rgba(188,162,255,.3);color:var(--ink)">'+
+      '<b>Read-only view \u00b7 no wallet needed.</b> This is a real pact on Bradbury that already ran the full lifecycle: '+
+      'both parties signed with their own wallets, the signature token was minted, and after the deadline the AI jury read the '+
+      'evidence page and returned a verdict that is now finalized on-chain. Every field below was read live from the contract, '+
+      'and the transaction is verifiable on the explorer. To create or sign your own pact, connect a wallet.</div>';
+  }
+  function clearDemoNote(){ const el=$("demoNote"); if(el)el.innerHTML=""; }
+  (function mountDemos(){
+    const row=$("demoRow");
+    DEMOS.filter(x=>x.addr).forEach(dm=>{
+      const b=document.createElement("button");
+      b.className="btn-ghost"; b.textContent=dm.label;
+      b.addEventListener("click",()=>{
+        sClick();
+        $("f_contract").value=dm.addr;
+        showDemoNote(dm.kind);
+        loadStatus();
+        $("statusPanel").scrollIntoView({behavior:"smooth",block:"start"});
+      });
+      row.appendChild(b);
+    });
+  })();
   $("autoBtn").addEventListener("click",()=>{ autoOn?stopAuto():startAuto(); });
   function startAuto(){
     autoOn=true; $("autoBtn").classList.remove("hidden");
