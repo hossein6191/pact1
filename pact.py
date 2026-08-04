@@ -92,7 +92,8 @@ THE AGREEMENT (plain language):
 WHAT THE EVIDENCE PAGE ACTUALLY CONTAINS:
 {page}
 
-Read the evidence carefully and decide: based ONLY on what is actually present on the evidence page, were the agreement's requirements met?
+Read the evidence carefully and decide: based ONLY on what is actually present on the evidence page,
+were the agreement's requirements met?
 Be strict and literal. If the required result is not clearly visible on the page, it is not fulfilled.
 
 Answer with ONLY one single lowercase word, nothing else:
@@ -107,6 +108,7 @@ unfulfilled"""
             return "unfulfilled"
 
         result = gl.eq_principle.strict_eq(judge_bool)
+
         self.is_settled = True
         if result == "fulfilled":
             self.verdict = "fulfilled"
@@ -114,6 +116,7 @@ unfulfilled"""
         else:
             self.verdict = "not_fulfilled"
             self.last_reasoning = "The jury read the evidence page but did not find proof the agreement was met. Check that the evidence URL points to exactly where the result should appear."
+
         return self.verdict
 
     @gl.public.view
