@@ -332,6 +332,12 @@
         <label>Evidence URL (what the AI reads)<span class="req">*</span><span class="q">?</span></label>
         <div class="tip"><b>Where the proof will be.</b> The exact page the AI jury reads at the deadline — e.g. the GitHub repo where the work should appear. Use the page where the result shows up, not just a profile.</div>
         <input id="f_evidence" placeholder="https://github.com/.../repo" />
+        <div class="tn-note" style="background:rgba(255,210,122,.07);border-color:rgba(255,210,122,.25);color:var(--ink);margin-top:10px">
+          <b>&#9888; The page must be public and readable without logging in.</b><br />
+          <b style="color:var(--ok)">Works:</b> GitHub files and repos, raw.githubusercontent.com, blog posts, docs, any plain public web page.<br />
+          <b style="color:var(--bad)">Doesn't work:</b> X/Twitter, Instagram, LinkedIn, Discord, private Google Docs. These block automated reading, so the jury sees an empty page and rules not fulfilled.<br />
+          <span style="opacity:.85">Quick test: open the link in a private/incognito window. If you can see the proof there without signing in, the jury can too.</span>
+        </div>
         <button type="button" id="evidenceSuggestBtn" class="suggest-toggle">What kind of page? &#9662;</button>
         <div id="evidenceSuggestList" class="suggest-list hidden"></div>
       </div></div>
@@ -1252,6 +1258,29 @@ unfulfilled"""
   }
   wireSuggest("termsSuggestBtn","termsSuggestList",TERMS_IDEAS,"f_terms");
   wireSuggest("evidenceSuggestBtn","evidenceSuggestList",EVIDENCE_IDEAS,"f_evidence");
+
+  /* ---- live check: warn if the evidence URL is a page the jury can't read ---- */
+  (function evidenceGuard(){
+    const el=$("f_evidence"); if(!el)return;
+    const BLOCKED=[["x.com","X/Twitter"],["twitter.com","X/Twitter"],["instagram.com","Instagram"],
+      ["linkedin.com","LinkedIn"],["discord.com","Discord"],["discord.gg","Discord"],
+      ["facebook.com","Facebook"],["tiktok.com","TikTok"],["t.me","Telegram"]];
+    let warn=null;
+    el.addEventListener("input",()=>{
+      const v=el.value.toLowerCase();
+      const hit=BLOCKED.find(p=>v.includes(p[0]));
+      if(hit){
+        if(!warn){ warn=document.createElement("div"); warn.className="tn-note";
+          warn.style.cssText="background:rgba(255,90,70,.1);border-color:rgba(255,90,70,.35);color:var(--bad);margin-top:8px";
+          el.parentNode.insertBefore(warn, el.nextSibling); }
+        warn.innerHTML="<b>\u26A0 "+hit[1]+" blocks automated reading.</b> The AI jury won't be able to see this page, so it would rule <b>not fulfilled</b> no matter what's on it. Use a public page instead, like a GitHub file or a blog post.";
+        el.style.borderColor="rgba(255,90,70,.6)";
+      }else{
+        if(warn){ warn.remove(); warn=null; }
+        el.style.borderColor="";
+      }
+    });
+  })();
   ["f_terms","f_partyb","f_ida","f_idb","f_evidence","f_days"].forEach(id=>{
     const el=$(id); if(el)el.addEventListener("input",()=>{el.style.borderColor="";});
   });
