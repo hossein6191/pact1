@@ -1492,8 +1492,8 @@ unfulfilled"""
 <script>
 /* ============================================================
    Pact — motion pass (drop-in)
-   Paste <script src="pact-motion.js"></script> right before </body>
-   in index.html, or paste this whole file inside a <script> tag there.
+   Load it with a script tag (src="pact-motion.js") right before the
+   closing body tag of index.html, or paste this file inside a script tag.
 
    It only ENHANCES what is already on the page (no markup changes):
      · 3D seal in the hero (three.js, loaded on demand)
@@ -1538,8 +1538,9 @@ unfulfilled"""
   #pm-halo{position:fixed;left:0;top:0;width:520px;height:520px;margin:-260px 0 0 -260px;border-radius:50%;
     z-index:0;pointer-events:none;opacity:0;transition:opacity .5s ease;mix-blend-mode:screen;
     background:radial-gradient(circle,rgba(120,95,255,.2),rgba(120,95,255,.07) 45%,transparent 70%)}
-  #pm-seal{position:absolute;right:-10px;top:48%;transform:translateY(-50%);width:430px;height:430px;
-    display:grid;place-items:center;z-index:0}
+  #pm-seal{width:430px;height:430px;display:grid;place-items:center;z-index:3}
+  #pm-seal.wide{position:absolute;right:-24px}
+  #pm-seal.flow{position:relative;width:100%;max-width:430px;height:330px;margin:30px auto 0}
   #pm-seal canvas{position:relative;width:100%;height:100%;display:block}
   #pm-seal .r1,#pm-seal .r2{position:absolute;border-radius:50%;pointer-events:none}
   #pm-seal .r1{width:320px;height:320px;border:1px solid rgba(188,162,255,.16)}
@@ -1548,7 +1549,6 @@ unfulfilled"""
   #pm-seal .orb i{position:absolute;width:10px;height:10px;border-radius:50%;background:#bca2ff;animation:pm-dot 2.2s ease-in-out infinite}
   #pm-seal .cap{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);white-space:nowrap;
     font-size:10.5px;letter-spacing:2.2px;text-transform:uppercase;color:#6f6b95}
-  @media(max-width:1180px){#pm-seal{display:none}}
   .pm-hint{display:flex;gap:14px;align-items:flex-start;margin-top:22px;padding:16px 18px;border-radius:16px;
     background:rgba(143,123,255,.07);border:1px solid rgba(188,162,255,.22);position:relative}
   .pm-hint img{width:56px;height:56px;object-fit:contain;flex-shrink:0;animation:pm-bob 3.4s ease-in-out infinite}
@@ -1739,14 +1739,29 @@ unfulfilled"""
 
   /* ---------- the 3D seal ---------- */
   const hero = q(".hero");
-  if (hero && innerWidth > 1180) {
+  if (hero) {
     const mount = document.createElement("div");
     mount.id = "pm-seal";
     mount.innerHTML = `<div class="r1"></div><div class="r2"></div>
       <div class="orb"><i style="top:-5px;left:50%"></i><i style="bottom:-5px;left:50%;animation-delay:.4s"></i>
       <i style="left:-5px;top:50%;animation-delay:.8s"></i><i style="right:-5px;top:50%;animation-delay:1.2s"></i></div>
       <canvas></canvas><span class="cap">The seal · move your mouse</span>`;
-    hero.appendChild(mount);
+    const firstBlock = q(".reveal", hero) || hero.firstElementChild;
+    const place = () => {
+      const wide = innerWidth > 1060;
+      mount.className = wide ? "wide" : "flow";
+      if (wide) {
+        if (mount.parentNode !== hero) hero.appendChild(mount);
+        firstBlock.style.maxWidth = "min(100%, 620px)";
+        mount.style.top = Math.max(0, firstBlock.offsetTop + firstBlock.offsetHeight / 2 - 215) + "px";
+      } else {
+        firstBlock.style.maxWidth = "";
+        if (mount.previousElementSibling !== firstBlock) firstBlock.after(mount);
+        mount.style.top = "";
+      }
+    };
+    place();
+    addEventListener("resize", place);
     const cv = q("canvas", mount);
 
     import("https://esm.sh/three@0.160.1").then(THREE => {
@@ -1829,7 +1844,7 @@ unfulfilled"""
         camera.aspect = w / h; camera.updateProjectionMatrix();
       };
       size();
-      addEventListener("resize", size);
+      addEventListener("resize", () => { place(); size(); });
 
       let hover = 0;
       mount.addEventListener("pointerenter", () => { hover = 1; });
@@ -1855,7 +1870,7 @@ unfulfilled"""
         requestAnimationFrame(tick);
       };
       tick();
-    }).catch(() => { mount.remove(); });
+    }).catch(err => { console.warn("[pact-motion] three.js could not load — 3D seal skipped", err); mount.remove(); });
   }
 })();
 
