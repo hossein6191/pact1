@@ -1529,18 +1529,16 @@ unfulfilled"""
   .pm-sheen{position:absolute;top:0;bottom:0;left:0;width:55%;pointer-events:none;z-index:0;
     background:linear-gradient(100deg,transparent,rgba(255,255,255,.36),transparent);transform:translateX(-130%) skewX(-18deg)}
   .pm-label{position:relative;z-index:1;display:inline-flex;align-items:center;gap:9px}
-  .pillar,.step,.paper{transform-style:preserve-3d;
+  .pillar,.step,.paper{transform-style:preserve-3d;isolation:isolate;
     transition:transform .25s cubic-bezier(.22,1,.36,1),border-color .3s ease,box-shadow .3s ease}
-  .pm-tglow{position:absolute;width:320px;height:320px;left:-999px;top:-999px;transform:translate(-50%,-50%);
+  .pm-tglow{position:absolute;z-index:-1;width:320px;height:320px;left:-999px;top:-999px;transform:translate(-50%,-50%);
     background:radial-gradient(circle,rgba(143,123,255,.22),transparent 62%);pointer-events:none;opacity:0;transition:opacity .3s}
-  .pillar>*,.step>*{position:relative}
-  .hero h1 .pm-w{display:inline-block;will-change:transform}
+  .hero h1 .pm-w{display:inline-block;will-change:transform;-webkit-background-clip:text;background-clip:text;color:transparent}
   #pm-halo{position:fixed;left:0;top:0;width:520px;height:520px;margin:-260px 0 0 -260px;border-radius:50%;
     z-index:0;pointer-events:none;opacity:0;transition:opacity .5s ease;mix-blend-mode:screen;
     background:radial-gradient(circle,rgba(120,95,255,.2),rgba(120,95,255,.07) 45%,transparent 70%)}
-  #pm-seal{width:430px;height:430px;display:grid;place-items:center;z-index:3}
-  #pm-seal.wide{position:absolute;right:-24px}
-  #pm-seal.flow{position:relative;width:100%;max-width:430px;height:330px;margin:30px auto 0}
+  #pm-seal{width:430px;height:430px;display:grid;place-items:center;z-index:3;position:absolute;right:-24px}
+  @media(max-width:1060px){#pm-seal{display:none}}
   #pm-seal canvas{position:relative;width:100%;height:100%;display:block}
   #pm-seal .r1,#pm-seal .r2{position:absolute;border-radius:50%;pointer-events:none}
   #pm-seal .r1{width:320px;height:320px;border:1px solid rgba(188,162,255,.16)}
@@ -1577,27 +1575,31 @@ unfulfilled"""
   /* ---------- headline words dodge the cursor ---------- */
   const h1 = q(".hero h1");
   if (h1) {
-    const wrapText = (node, perLetter) => {
+    const GRAD = "linear-gradient(180deg,#ffffff 0%,#d7ccff 66%,#a894ff 100%)";
+    const GRAD_EM = "linear-gradient(120deg,#bca2ff,#7d5cff)";
+    const wrapText = (node, perLetter, grad) => {
       const parts = perLetter ? [...node.textContent] : node.textContent.split(/(\s+)/);
       const frag = document.createDocumentFragment();
       parts.forEach(p => {
         if (!p.trim()) { frag.appendChild(document.createTextNode(p)); return; }
         const s = document.createElement("span");
         s.className = "pm-w";
+        if (perLetter) s.dataset.l = "1";
+        s.style.backgroundImage = grad;
         s.textContent = p;
         frag.appendChild(s);
       });
       node.replaceWith(frag);
     };
-    [...h1.childNodes].forEach(n => { if (n.nodeType === 3) wrapText(n, false); });
+    [...h1.childNodes].forEach(n => { if (n.nodeType === 3) wrapText(n, false, GRAD); });
     const em = q("em", h1);
-    if (em) [...em.childNodes].forEach(n => { if (n.nodeType === 3) wrapText(n, true); });
+    if (em) [...em.childNodes].forEach(n => { if (n.nodeType === 3) wrapText(n, true, GRAD_EM); });
   }
   let words = [];
   const measure = () => {
     words = qa(".hero h1 .pm-w").map(el => {
       const r = el.getBoundingClientRect(), prev = words.find(w => w.el === el);
-      return { el, cx: r.left + r.width / 2, cy: r.top + r.height / 2, tx: prev ? prev.tx : 0, ty: prev ? prev.ty : 0, s: prev ? prev.s : 1 };
+      return { el, letter: el.dataset.l === "1", cx: r.left + r.width / 2, cy: r.top + r.height / 2, tx: prev ? prev.tx : 0, ty: prev ? prev.ty : 0, s: prev ? prev.s : 1 };
     });
   };
   measure();
@@ -1609,13 +1611,13 @@ unfulfilled"""
     halo.style.transform = `translate(${hx}px,${hy}px)`;
     halo.style.opacity = seen ? "1" : "0";
     if (grid) grid.style.transform = `translate(${(px / innerWidth - .5) * -14}px,${(py / innerHeight - .5) * -14}px)`;
-    const R = 300 * K;
+    const R = 280 * K;
     words.forEach(w => {
       const dx = w.cx - px, dy = w.cy - py, d = Math.hypot(dx, dy);
       let tx = 0, ty = 0, s = 1;
       if (d < R) {
-        const f = 1 - d / R, push = 26 * K * f * f;
-        tx = (dx / (d || 1)) * push; ty = (dy / (d || 1)) * push * .6; s = 1 + .06 * f * K;
+        const f = 1 - d / R, push = (w.letter ? 22 : 11) * K * f * f;
+        tx = (dx / (d || 1)) * push; ty = (dy / (d || 1)) * push * .7; s = 1 + (w.letter ? .06 : .03) * f * K;
       }
       w.tx += (tx - w.tx) * .12; w.ty += (ty - w.ty) * .12; w.s += (s - w.s) * .12;
       w.el.style.transform = `translate(${w.tx.toFixed(2)}px,${w.ty.toFixed(2)}px) scale(${w.s.toFixed(3)})`;
@@ -1739,7 +1741,7 @@ unfulfilled"""
 
   /* ---------- the 3D seal ---------- */
   const hero = q(".hero");
-  if (hero) {
+  if (hero && innerWidth > 1060) {
     const mount = document.createElement("div");
     mount.id = "pm-seal";
     mount.innerHTML = `<div class="r1"></div><div class="r2"></div>
@@ -1747,18 +1749,13 @@ unfulfilled"""
       <i style="left:-5px;top:50%;animation-delay:.8s"></i><i style="right:-5px;top:50%;animation-delay:1.2s"></i></div>
       <canvas></canvas><span class="cap">The seal · move your mouse</span>`;
     const firstBlock = q(".reveal", hero) || hero.firstElementChild;
+    const pillars = q(".pillars", hero);
+    hero.appendChild(mount);
     const place = () => {
-      const wide = innerWidth > 1060;
-      mount.className = wide ? "wide" : "flow";
-      if (wide) {
-        if (mount.parentNode !== hero) hero.appendChild(mount);
-        firstBlock.style.maxWidth = "min(100%, 620px)";
-        mount.style.top = Math.max(0, firstBlock.offsetTop + firstBlock.offsetHeight / 2 - 215) + "px";
-      } else {
-        firstBlock.style.maxWidth = "";
-        if (mount.previousElementSibling !== firstBlock) firstBlock.after(mount);
-        mount.style.top = "";
-      }
+      firstBlock.style.maxWidth = "min(100%, 640px)";
+      let top = firstBlock.offsetTop + firstBlock.offsetHeight / 2 - 215;
+      if (pillars) top = Math.min(top, pillars.offsetTop - 430 - 30);
+      mount.style.top = Math.max(90, top) + "px";
     };
     place();
     addEventListener("resize", place);
