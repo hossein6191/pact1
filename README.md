@@ -9,16 +9,16 @@
 
 ### See it work without deploying anything
 
-Open the site and press either demo button. No wallet needed. They load two real pacts live from the chain:
+Open the site and press either demo button. No wallet needed. They load two real pacts live from the chain — and each one links straight to its verdict on the explorer, so you never have to take this page's word for anything.
 
-```
-0x1213eaaeDC4853Df4dc3099732Aa751FA22d8360   →  FULFILLED
-0xdDa57EcCe4644a0b681E464e73d460Bc18353259   →  NOT FULFILLED
-```
+| Verdict | Pact contract | The jury ruling |
+|---|---|---|
+| **FULFILLED** | [`0x1213eaae…`](https://explorer-studio.genlayer.com/contracts/0x1213eaaeDC4853Df4dc3099732Aa751FA22d8360) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0x91dc87407ac5ad31431b4d6d0d3f184df145516341c8fb9c24c687127c341f34) |
+| **NOT FULFILLED** | [`0xdDa57EcC…`](https://explorer-studio.genlayer.com/contracts/0xdDa57EcCe4644a0b681E464e73d460Bc18353259) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0x8d2c0055d113c66e89840f4de8e030dd4774154e500771460ff70618a7150a96) |
 
 These two are the whole argument for the project. **They carry the exact same agreement text.** The only thing that differs is the evidence URL — one repository had the delivered file, the other did not. Same words, same jury, opposite verdicts. That is the difference between a model rubber-stamping whatever it is handed and a jury that actually reads.
 
-Both ran the entire lifecycle: two wallets signed, the signature token was minted, and after the deadline the AI jury read the evidence page and returned a verdict now finalized on-chain. Every field shown is read live via `get_status`, and both settle transactions are verifiable on the [Studio explorer](https://explorer-studio.genlayer.com).
+Open both settle transactions side by side. Each is `FINALIZED` with `MAJORITY_AGREE`, and you can see the validator set, their individual votes, and the recorded result. Both pacts ran the entire lifecycle: two wallets signed, the signature token was minted, and after the deadline the jury read the evidence page and returned a verdict now final on-chain. Every field the site shows is read live via `get_status`.
 
 ---
 
