@@ -406,6 +406,18 @@
 
     <label for="f_terms">The agreement, in plain words<span class="req">*</span></label>
     <textarea id="f_terms" rows="3" placeholder="e.g. Sara delivers the finished logo to the repo by Friday."></textarea>
+    <div class="tn-note" style="background:rgba(143,123,255,.07);border-color:rgba(188,162,255,.28)">
+      <b>Write a test, not a wish.</b> The jury reads the <i>text</i> of your evidence page and checks it
+      against these words. It is good at facts it can see, and it cannot judge taste or effort.<br />
+      <b style="color:var(--ok)">Checkable:</b> “a file named <code>logo.svg</code> exists in the repo” ·
+      “the post is at least 500 words and mentions X, Y and Z” · “the README lists a Pricing section”.<br />
+      <b style="color:var(--bad)">Not checkable:</b> “a <i>good</i> logo” · “a <i>professional</i> website” ·
+      “real effort”. If you don’t set a bar, anything that exists will pass — a one-line article counts
+      as an article.<br />
+      <span style="opacity:.85"><b>Images can’t be judged at all.</b> The jury reads text only. It can confirm an image
+      file is <i>there</i>; it can never see what the picture looks like. Agree on the picture between
+      yourselves, and use the pact for the part a machine can verify.</span>
+    </div>
     <button type="button" class="suggest-btn" id="termsSuggestBtn">Need ideas? Pick a ready-made agreement ▾</button>
     <div class="suggest-list hidden" id="termsSuggestList"></div>
 
@@ -434,7 +446,7 @@
     <div class="suggest-list hidden" id="evidenceSuggestList"></div>
 
     <p style="font-size:12px;color:var(--muted-2);margin-top:20px"><span class="req">*</span> All fields are required. You'll review and sign the pact on the next screen.</p>
-    <div class="btn-row"><button class="btn-primary" id="reviewBtn">Review &amp; sign ✎</button></div>
+    <div class="btn-row"><button class="btn-primary" id="reviewBtn">Review &amp; sign ✎</button><button class="btn-ghost" id="newDraftBtn">Start a new draft</button></div>
     <div id="createTx"></div>
     <div class="status hidden" id="createStatus"></div>
   </div>
@@ -678,6 +690,10 @@ class Pact(gl.Contract):
         # separately and is allowed to vary.
         def judge_bool() -> str:
             page = gl.nondet.web.render(url, mode="text")
+            # An image URL, a login wall or a dead link all render to (almost) nothing.
+            # Decide that here instead of asking the model to reason about an empty page.
+            if len(page.strip()) < 40:
+                return "unfulfilled"
             prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
 
 THE AGREEMENT (plain language):
@@ -1057,6 +1073,27 @@ unfulfilled"""
   syncPaper();
 
   /* ---------------- review & sign (create) ---------------- */
+  /* Clears only this form. Never touches a pact already on-chain \u2014 those keep living
+     at their own addresses, which is why the confirm text says so explicitly. */
+  $("newDraftBtn").addEventListener("click",()=>{
+    const ids=["f_terms","f_partyb","f_ida","f_idb","f_evidence","f_days"];
+    const filled=ids.filter(id=>(($(id)||{}).value||"").trim()!=="");
+    if(!filled.length){ showToast("Nothing to clear","This draft form is already empty."); return; }
+    const ok=confirm(
+      "Start a new draft?\n\n"+
+      "This clears the "+filled.length+" field"+(filled.length>1?"s":"")+" you have filled in on this form.\n\n"+
+      "It does NOT delete anything already on-chain. Any pact you have deployed keeps existing "+
+      "at its own address and can still be opened, signed and settled.\n\n"+
+      "Clear the form?");
+    if(!ok) return;
+    ids.forEach(id=>{ const el=$(id); if(!el)return; el.value=""; el.style.borderColor="";
+      el.dispatchEvent(new Event("input",{bubbles:true})); });
+    const cs=$("createStatus"); if(cs){ cs.classList.add("hidden"); cs.innerHTML=""; }
+    const ct=$("createTx"); if(ct) ct.innerHTML="";
+    $("f_terms").focus();
+    showToast("Fresh draft","Form cleared. Anything already deployed is untouched.");
+  });
+
   $("reviewBtn").addEventListener("click",()=>{
     if(needWallet())return;
     const terms=$("f_terms").value.trim();
@@ -1153,9 +1190,11 @@ unfulfilled"""
   /* ---------------- load / status (+ auto refresh) ---------------- */
   $("loadBtn").addEventListener("click",()=>{ if(needWallet())return; clearDemoNote(); loadStatus(); startAuto(); });
 
+  // Two real pacts on Studio with the SAME agreement text and different evidence URLs.
+  // One had the file, one didn't. Best possible proof that the jury reads and discriminates.
   const DEMOS=[
-    {addr:"0x916471d678b61Bbb331e3089972a46945793114c", label:"\uD83D\uDC40 A real pact the jury ruled FULFILLED", kind:"settled"},
-    {addr:"0xCdf7f2c71Ba11EF8e58c1686fdC979DdE79606C6", label:"\uD83D\uDC40 A real pact the jury ruled NOT FULFILLED", kind:"settled"}
+    {addr:"0x1213eaaeDC4853Df4dc3099732Aa751FA22d8360", label:"\uD83D\uDC40 Same deal, evidence delivered \u2192 FULFILLED", kind:"settled"},
+    {addr:"0xdDa57EcCe4644a0b681E464e73d460Bc18353259", label:"\uD83D\uDC40 Same deal, evidence missing \u2192 NOT FULFILLED", kind:"settled"}
   ];
   function showDemoNote(kind){
     const el=$("demoNote");
@@ -1376,17 +1415,19 @@ unfulfilled"""
   }
 
   /* ---------------- suggestions ---------------- */
+  /* Every one of these states a bar the jury can actually measure in page text.
+     Vague briefs ("a good logo") are deliberately not offered \u2014 they always pass. */
   const TERMS_IDEAS=[
-    ["Freelance \u2014 design delivery","The freelancer delivers the finished logo design files to the agreed GitHub repository by the deadline. Fulfilled if the files are present in the repo."],
-    ["Freelance \u2014 website build","The developer pushes a working website to the agreed repository by the deadline. Fulfilled if the repo shows a completed, deployable project."],
-    ["Freelance \u2014 article writing","The writer publishes the agreed article on the linked blog by the deadline. Fulfilled if the article is live and matches the agreed topic."],
-    ["Content \u2014 post a video","The creator publishes a video on the linked channel by the deadline. Fulfilled if a new video on the agreed topic appears."],
-    ["Content \u2014 tweet thread","The creator posts a thread about the agreed topic on the linked X/Twitter profile by the deadline. Fulfilled if the thread is public and on-topic."],
-    ["Open source \u2014 ship a feature","The contributor merges the agreed feature into the linked repository by the deadline. Fulfilled if it appears in the repo's commits or releases."],
-    ["Open source \u2014 fix bugs","The contributor closes the agreed issues in the linked repository by the deadline. Fulfilled if those issues show as closed."],
-    ["Milestone \u2014 finish a course","The learner completes the agreed online course and shows proof on the linked page by the deadline. Fulfilled if completion is visible."],
-    ["Challenge \u2014 ship daily","The participant posts daily progress on the linked page for the agreed number of days. Fulfilled if the posts are present for the period."],
-    ["Bet \u2014 public prediction","The agreed prediction about a public event is checked against the linked source at the deadline. Fulfilled if the prediction turned out correct."]
+    ["Freelance \u2014 design delivery","By the deadline, the linked repository contains the delivered design files: a file named logo.svg and a file named logo.png, both inside a folder named assets. Fulfilled only if both file names are visible on the linked page."],
+    ["Freelance \u2014 website build","By the deadline, the linked repository contains a README that documents the built site and lists, in text, at least these sections: Home, Pricing, Contact. Fulfilled only if all three section names appear."],
+    ["Freelance \u2014 article writing","By the deadline, the linked page shows a published article of at least 500 words about the agreed topic, containing a title, at least three subheadings, and a closing summary. Fulfilled only if the full text is visible on the page."],
+    ["Content \u2014 publish a post","By the deadline, the linked page shows a published post about the agreed topic that names the product at least three times and includes a link back to the project. Fulfilled only if that text is present."],
+    ["Open source \u2014 ship a feature","By the deadline, the linked repository page shows a release or changelog entry naming the agreed feature, plus a version number higher than the one at signing. Fulfilled only if both are visible in the page text."],
+    ["Open source \u2014 fix bugs","By the deadline, the linked issues page shows the agreed issue numbers with the status Closed. Fulfilled only if every one of those numbers is listed as closed."],
+    ["Docs \u2014 write a guide","By the deadline, the linked page shows a setup guide with numbered steps, a prerequisites list, and at least one code block. Fulfilled only if all three are visible in the text."],
+    ["Milestone \u2014 finish a course","By the deadline, the linked page shows a completion record naming the agreed course and the learner\u2019s name. Fulfilled only if both names appear on the page."],
+    ["Challenge \u2014 ship daily","By the deadline, the linked page lists a dated entry for each of the agreed days, with no gaps. Fulfilled only if every date in the range is present."],
+    ["Bet \u2014 public prediction","At the deadline, the linked public source states the outcome of the agreed event. Fulfilled only if that source states the predicted outcome happened."]
   ];
   const EVIDENCE_IDEAS=[
     ["GitHub repo","https://github.com/owner/repo"],

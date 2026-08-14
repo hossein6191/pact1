@@ -84,6 +84,10 @@ class Pact(gl.Contract):
         # separately and is allowed to vary.
         def judge_bool() -> str:
             page = gl.nondet.web.render(url, mode="text")
+            # An image URL, a login wall or a dead link all render to (almost) nothing.
+            # Decide that here instead of asking the model to reason about an empty page.
+            if len(page.strip()) < 40:
+                return "unfulfilled"
             prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
 
 THE AGREEMENT (plain language):
