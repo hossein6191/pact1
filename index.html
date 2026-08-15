@@ -1652,12 +1652,15 @@ unfulfilled"""
   /* faucet strip */
   .pm-faucet{border:1px solid rgba(255,176,32,.3);border-radius:10px;background:var(--panel);overflow:hidden;
     display:grid;grid-template-columns:minmax(0,1fr) 290px;margin:28px 0 0}
+  @media(max-width:1180px){.pm-faucet{grid-template-columns:1fr}
+    .pm-faucet .side{border-left:none;border-top:1px solid var(--line);flex-direction:row;align-items:center;flex-wrap:wrap}
+    .pm-faucet .side .btn-primary{flex:1;min-width:200px}}
   .pm-faucet .body{padding:24px 26px}
   .pm-faucet .side{border-left:1px solid var(--line);background:#0B0B0E;padding:24px 22px;
     display:flex;flex-direction:column;justify-content:center;gap:14px}
   .pm-faucet h4{font-family:var(--serif);font-size:21px;font-weight:700;letter-spacing:-.6px;margin:8px 0 0}
   .pm-faucet p{font-size:14px;color:var(--muted);line-height:1.7;margin:8px 0 0;max-width:62ch}
-  .pm-faucet ol{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;list-style:none;margin:18px 0 0;padding:0}
+  .pm-faucet ol{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:12px 18px;list-style:none;margin:18px 0 0;padding:0}
   .pm-faucet li{border-left:2px solid #110FFF;padding:2px 0 2px 14px}
   .pm-faucet li:last-child{border-left-color:${AC}}
   .pm-faucet li span{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:1.4px;color:#55555f}
@@ -1665,12 +1668,17 @@ unfulfilled"""
   .pm-faucet .drop{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);line-height:1.5}
   .pm-faucet .drop span{width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,176,32,.4);
     display:grid;place-items:center;flex-shrink:0}
-  @media(max-width:900px){.pm-faucet{grid-template-columns:1fr}.pm-faucet .side{border-left:none;border-top:1px solid var(--line)}}
-  @media(max-width:760px){.pm-faucet ol{grid-template-columns:1fr}}`;
+`;
   document.head.appendChild(style);
 
   /* ---------- copy: no em dashes, clearer identity fields ---------- */
   document.title = document.title.replace(/\s*—\s*/g, ", ");
+  const trimDot = root => {
+    (root.querySelectorAll ? root.querySelectorAll("h1,h2,h3,h4,.pm-faucet h4") : []).forEach(h => {
+      const last = [...h.childNodes].reverse().find(n => n.nodeType === 3 && n.nodeValue.trim());
+      if (last) last.nodeValue = last.nodeValue.replace(/\.\s*$/, "");
+    });
+  };
   const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\uFE0F]/gu;
   const cleanTree = root => {
     const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -1686,6 +1694,7 @@ unfulfilled"""
     });
   };
   cleanTree(document.body);
+  trimDot(document);
   const relabel = (sel, text) => { const el = q(sel); if (el) el.childNodes[0].nodeValue = text; };
   relabel('label[for="f_ida"]', "Your profile link");
   relabel('label[for="f_idb"]', "The other person's profile link");
@@ -1713,7 +1722,7 @@ unfulfilled"""
   /* ---------- pillars: drawn icons instead of emoji ---------- */
   const ICONS = [
     '<path d="M16 6v20"/><path d="M9 26h14"/><path d="M4 10h24"/><path d="M4 10 1 18a4.5 4.5 0 0 0 6 0Z"/><path d="M28 10l3 8a4.5 4.5 0 0 1-6 0Z"/>',
-    '<path d="M6 25c4-1 6-3 9-7l6-9a3 3 0 1 1 5 3l-6 9c-2.6 4.2-4.6 5.6-9 6"/><path d="M20 8l4.5 2.6"/><path d="M3 28c2-2 4-2 6-1"/>',
+    '<path d="M25.4 5.6a2.9 2.9 0 0 1 0 4.1L13.2 21.9l-5.1 1 1-5.1L21.3 5.6a2.9 2.9 0 0 1 4.1 0Z"/><path d="M19.6 7.3l4.1 4.1"/><path d="M4 27c2.6 0 3.4-3 6-3s3.4 3 6 3 3.4-3 6-3 2.6 1.5 6 1.5"/>',
     '<path d="M13 19a5 5 0 0 0 7 0l4-4a5 5 0 0 0-7-7l-2 2"/><path d="M19 13a5 5 0 0 0-7 0l-4 4a5 5 0 0 0 7 7l2-2"/>'
   ];
   qa(".pillar").forEach((p, i) => {
@@ -1758,7 +1767,7 @@ unfulfilled"""
   const DROP = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="' + AC + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.4 6 10.5A6 6 0 0 1 6 13.5C6 9.4 12 3 12 3Z"/></svg>';
   const faucetHTML = `<div class="body">
       <span class="kicker">BEFORE YOU START</span>
-      <h4>You need test GEN to pay for gas.</h4>
+      <h4>You need test GEN to pay for gas</h4>
       <p>Test GEN is free. It comes from the GenLayer Studio, not from this site, so grab it there first and come back.</p>
       <ol>
         <li><span>STEP 01</span><em>Open <a href="https://studio.genlayer.com/" target="_blank" rel="noopener">studio.genlayer.com</a></em></li>
@@ -1802,6 +1811,19 @@ unfulfilled"""
     const btn = q(".gotit", welcome);
     if (btn) btn.before(note); else welcome.appendChild(note);
   }
+
+  const DEMO_ADDRS = ["0x916471d678b61Bbb331e3089972a46945793114c", "0xCdf7f2c71Ba11EF8e58c1686fdC979DdE79606C6"];
+  const showDemoAddrs = () => {
+    qa("#demoRow button").forEach((b, i) => {
+      if (b.dataset.addr || !DEMO_ADDRS[i]) return;
+      b.dataset.addr = DEMO_ADDRS[i];
+      b.style.cssText += ";display:block;text-align:left;padding:13px 16px";
+      const a = document.createElement("span");
+      a.style.cssText = "display:block;font-family:var(--mono);font-size:10.5px;color:#55555f;margin-top:5px;word-break:break-all";
+      a.textContent = DEMO_ADDRS[i];
+      (q(".pm-label", b) || b).appendChild(a);
+    });
+  };
 
   /* ---------- pointer state ---------- */
   let px = innerWidth / 2, py = innerHeight / 2, hx = px, hy = py, seen = false;
@@ -1886,8 +1908,9 @@ unfulfilled"""
   const wireButtons = () => qa(".btn-primary,.btn-ghost,.gotit").forEach(magnet);
   wireButtons();
   new MutationObserver(muts => {
-    muts.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) cleanTree(n); }));
+    muts.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) { cleanTree(n); trimDot(n); } }));
     wireButtons();
+    showDemoAddrs();
   }).observe(document.body, { childList: true, subtree: true, characterData: false });
 
   /* ---------- tilt ---------- */
