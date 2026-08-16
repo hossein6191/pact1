@@ -1459,7 +1459,8 @@ unfulfilled"""
      not fulfilled, and it read like a broken jury. Brackets make the edit obvious,
      and if one is missed the pre-flight check below catches it before deploy. */
   const TERMS_IDEAS=[
-    ["Freelance \u2014 design delivery","By the deadline, the linked repository contains a file named [FILE NAME, e.g. logo.svg]. Fulfilled only if that exact file name is visible on the linked page."],
+    ["Freelance \u2014 design delivery (any format)","By the deadline, the linked page shows that the agreed design file has been delivered, in any common image format such as .jpg, .png or .svg. Fulfilled if such a file is visible on the page. NOTE: the jury reads text, so it can confirm the file is there but cannot see whether the artwork itself is what you wanted."],
+    ["Freelance \u2014 design delivery (exact file)","By the deadline, the linked repository contains a file named [FILE NAME, e.g. logo.svg]. Fulfilled only if that exact file name is visible on the linked page. NOTE: naming a format makes this strict \u2014 logo.jpg will not satisfy a term that asks for logo.svg."],
     ["Freelance \u2014 website build","By the deadline, the linked repository contains a README that lists, in text, these sections: [SECTION NAMES, e.g. Home, Pricing, Contact]. Fulfilled only if every one of those section names appears."],
     ["Freelance \u2014 article writing","By the deadline, the linked page shows a published article of at least [WORD COUNT, e.g. 500] words about [TOPIC], containing a title and at least [NUMBER, e.g. 3] subheadings. Fulfilled only if the full text is visible on the page."],
     ["Content \u2014 publish a post","By the deadline, the linked page shows a published post about [TOPIC] that mentions [WHAT MUST BE NAMED] at least [NUMBER, e.g. 3] times. Fulfilled only if that text is present."],
