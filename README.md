@@ -13,8 +13,8 @@ Open the site and press either demo button. No wallet needed. They load two real
 
 | Verdict | Pact contract | The jury ruling |
 |---|---|---|
-| **FULFILLED** | [`0x1213eaae…`](https://explorer-studio.genlayer.com/contracts/0x1213eaaeDC4853Df4dc3099732Aa751FA22d8360) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0x91dc87407ac5ad31431b4d6d0d3f184df145516341c8fb9c24c687127c341f34) |
-| **NOT FULFILLED** | [`0xdDa57EcC…`](https://explorer-studio.genlayer.com/contracts/0xdDa57EcCe4644a0b681E464e73d460Bc18353259) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0x8d2c0055d113c66e89840f4de8e030dd4774154e500771460ff70618a7150a96) |
+| **FULFILLED** | [`0x6736651c…`](https://explorer-studio.genlayer.com/contracts/0x6736651cFba91AAe4f2eeA5aC83f3E646d49e47B) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0xd1c84d7aaae73562c481276a5b0010b02a4e4c354df04432a9fc85ea48ba91c7) |
+| **NOT FULFILLED** | [`0xE8D52E1f…`](https://explorer-studio.genlayer.com/contracts/0xE8D52E1fdc5Ac0A65D96d3164b67231D795e6847) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0x3f72a4cd50d04bb3b6afa4231f2f422e7f9fb9d310fb9906cba59f941892aa5b) |
 
 These two are the whole argument for the project. **They carry the exact same agreement text.** The only thing that differs is the evidence URL — one repository had the delivered file, the other did not. Same words, same jury, opposite verdicts. That is the difference between a model rubber-stamping whatever it is handed and a jury that actually reads.
 
