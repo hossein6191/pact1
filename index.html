@@ -846,6 +846,44 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   }
   var provis={};
   function trackProvisional(fn,tx){ provis[loadedContract]={fn:fn,tx:tx,final:false}; }
+  /* A reload wipes provis, so a pact settled in an earlier session had no tx hash
+     to link and no finality to report. Recover both from the chain: find the write
+     that settled this contract, then track it exactly as if we had just sent it. */
+  var recovering={};
+  async function recoverSettleTx(addr){
+    if(!addr || provis[addr] || recovering[addr]) return;
+    recovering[addr]=true;
+    try{
+      const c=createClient({chain:CHAIN});
+      const res=await fetch(CHAIN.rpcUrls.default.http[0],{method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({jsonrpc:"2.0",id:Date.now(),
+          method:"sim_getTransactionsForAddress",params:[addr]})});
+      const j=await res.json();
+      const list=Array.isArray(j.result)?j.result:[];
+      /* calldata is base64-encoded CBOR-ish bytes, not a parsed object, so the
+         method name is only reachable by decoding it. Anything unreadable is
+         skipped rather than guessed at. */
+      const methodOf=(t)=>{
+        try{
+          const b64=t && t.data && t.data.calldata;
+          if(typeof b64!=="string") return "";
+          const bin=atob(b64);
+          if(bin.indexOf("settle")>-1) return "settle";
+          if(bin.indexOf("sign")>-1) return "sign";
+          return "";
+        }catch(e){ return ""; }
+      };
+      let hit=null;
+      for(const t of list){ if(methodOf(t)==="settle") hit=t; }
+      if(hit && hit.hash){
+        provis[addr]={fn:"settle",tx:hit.hash,final:String(hit.status)==="FINALIZED"};
+        if(!provis[addr].final) watchFinalization(hit.hash,"settle",addr);
+        if(loadedContract===addr) loadStatus(true);
+      }
+    }catch(e){}
+    finally{ recovering[addr]=false; }
+  }
   function watchFinalization(tx,fn,addr){
     try{
       var c=createClient({chain:CHAIN});
@@ -1268,7 +1306,10 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   function tnNote(){ return '<div class="tn-note"><b>Seeing an error or timeout?</b> The Studio network is a shared sandbox and its validators can occasionally time out or return an error even when your input is fine. If that happens, just try the same action again in a minute \u2014 it usually goes through.</div>'; }
 
   /* ---------------- load / status (+ auto refresh) ---------------- */
-  $("loadBtn").addEventListener("click",()=>{ if(needWallet())return; clearDemoNote(); loadStatus(); startAuto(); });
+  /* Reading a pact is a view call on a public chain, so it needs no wallet. The demo
+     buttons already load without one; requiring a wallet here only blocked people
+     from opening an address someone sent them. Writes still prompt to connect. */
+  $("loadBtn").addEventListener("click",()=>{ clearDemoNote(); loadStatus(); startAuto(); });
 
   // Two real pacts on Studio carrying the SAME agreement text; only the evidence URL differs.
   // tx = the settle transaction, i.e. the moment the jury actually ruled. Linking it lets a
@@ -1375,7 +1416,13 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     const p=provis[loadedContract];
     const settleProvisional = s.is_settled && p && p.fn==="settle" && !p.final;
     const signProvisional = s.is_active && !s.is_settled && p && p.fn==="sign" && !p.final;
-    const tail=(prov)=> prov ? " <span style='font-weight:500;opacity:.85;margin-left:8px'>\u00b7 finalizing\u2026</span>" : " <span style='font-weight:500;color:var(--ok);margin-left:8px'>\u00b7 confirmed</span>";
+    /* Three states, not two: finalizing, confirmed, and "we haven't checked yet".
+       Before this, a reloaded page printed "confirmed" for any settled pact even
+       though nothing had verified finality in that session. */
+    const known=!!p;
+    const tail=(prov)=> prov ? " <span style='font-weight:500;opacity:.85;margin-left:8px'>\u00b7 finalizing\u2026</span>"
+      : (known ? " <span style='font-weight:500;color:var(--ok);margin-left:8px'>\u00b7 confirmed</span>"
+               : " <span style='font-weight:500;opacity:.7;margin-left:8px'>\u00b7 checking\u2026</span>");
 
     if(s.is_settled){
       pill("drafted").classList.add("done");pill("signed").classList.add("done");pill("active").classList.add("done");pill("settled").classList.add("on");
@@ -1383,6 +1430,10 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       else if(s.verdict==="fulfilled"){ b.classList.add("v-ok"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The FULFILLED ruling is recorded on-chain and is being finalized. On the Studio network this usually lands within a few minutes \u2014 it stays valid, and you can leave the page."); else clearFinalizingNote(); }
       else { b.classList.add("v-bad"); b.innerHTML="\u2696 The jury ruled: <b style='margin-left:6px'>NOT FULFILLED</b>"+tail(settleProvisional); if(settleProvisional)showFinalizingNote("The NOT FULFILLED ruling is recorded on-chain and is being finalized. On the Studio network this usually lands within a few minutes \u2014 it stays valid, and you can leave the page."); else clearFinalizingNote(); }
       if(s.verdict==="cancelled") clearReasonNote(); else showReasonNote(s.last_reasoning||"", s.verdict);
+      if(s.verdict!=="cancelled"){
+        if(p&&p.tx) $("actionTx").innerHTML=exLink(p.tx);
+        else recoverSettleTx(loadedContract);   // reloaded page: go find it
+      }
       $("signBtn").classList.add("hidden");$("settleBtn").disabled=true;$("cancelBtn").disabled=true;
       stopAuto();
       if(!(prev&&prev.is_settled)){
