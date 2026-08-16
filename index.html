@@ -1273,12 +1273,14 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   // Two real pacts on Studio carrying the SAME agreement text; only the evidence URL differs.
   // tx = the settle transaction, i.e. the moment the jury actually ruled. Linking it lets a
   // reviewer verify the verdict on-chain instead of trusting this page.
+  // Both were settled by the prompt_comparative contract, so each carries the model's own
+  // reasoning on-chain naming the file it found or missed, not a canned sentence.
   const DEMOS=[
-    {addr:"0x1213eaaeDC4853Df4dc3099732Aa751FA22d8360",
-     tx:"0x91dc87407ac5ad31431b4d6d0d3f184df145516341c8fb9c24c687127c341f34",
+    {addr:"0xCdfA71FED704004306B9BE37231705a69fe0964d",
+     tx:"0x6a5dfc552e0f2dcee53b4d0d833aad4d8093011b1c8a137ecd037bb2e1a9d73f",
      label:"\uD83D\uDC40 Same deal, evidence delivered \u2192 FULFILLED", kind:"settled"},
-    {addr:"0xdDa57EcCe4644a0b681E464e73d460Bc18353259",
-     tx:"0x8d2c0055d113c66e89840f4de8e030dd4774154e500771460ff70618a7150a96",
+    {addr:"0xa654F4D66E0a376e87fC5eA730328AbA19868140",
+     tx:"0xeaea7a68d9d2785b0b71d92a84ea61d959cc8ab22bd86f7b9f6efcf31fc1a0d4",
      label:"\uD83D\uDC40 Same deal, evidence missing \u2192 NOT FULFILLED", kind:"settled"}
   ];
   function showDemoNote(dm){
