@@ -416,7 +416,10 @@
       as an article, and a one-line website still counts as a website.<br />
       <span style="opacity:.85"><b>Images can’t be judged at all.</b> The jury reads text only. It can confirm an image
       file is <i>there</i> and named what you agreed; it can never see whether the picture is the one you wanted.
-      Agree the artwork between yourselves, and use the pact for the part a machine can actually verify.</span>
+      Agree the artwork between yourselves, and use the pact for the part a machine can actually verify.</span><br />
+      <span style="opacity:.85"><b>Using a suggestion below?</b> It’s a worked example, not text to use as-is — file names
+      like <code>logo.svg</code> or section names like <code>Pricing</code> are placeholders. Replace them with your
+      actual deliverable, or the jury will correctly rule not fulfilled against evidence that never had those exact words.</span>
     </div>
     <button type="button" class="suggest-btn" id="termsSuggestBtn">Need ideas? Pick a ready-made agreement ▾</button>
     <div class="suggest-list hidden" id="termsSuggestList"></div>
@@ -1459,18 +1462,30 @@ unfulfilled"""
     ["YouTube channel","https://youtube.com/@channel"],
     ["Medium profile","https://medium.com/@username"]
   ];
-  function wireSuggest(btnId,listId,ideas,targetId){
+  function wireSuggest(btnId,listId,ideas,targetId,onPick){
     const list=$(listId), btn=$(btnId), labelClosed=btn.textContent;
     ideas.forEach(pair=>{
       const b=document.createElement("button"); b.type="button"; b.className="suggest-item";
       b.innerHTML='<span class="tagline">'+pair[0]+'</span>'+pair[1];
-      b.addEventListener("click",()=>{ $(targetId).value=pair[1]; $(targetId).style.borderColor=""; list.classList.add("hidden"); btn.textContent=labelClosed; syncPaper(); });
+      b.addEventListener("click",()=>{
+        const el=$(targetId);
+        el.value=pair[1]; el.style.borderColor=""; list.classList.add("hidden"); btn.textContent=labelClosed; syncPaper();
+        if(onPick) onPick(el, pair);
+      });
       list.appendChild(b);
     });
     btn.addEventListener("click",()=>{ const hidden=list.classList.toggle("hidden"); btn.textContent=hidden?labelClosed:"Hide suggestions \u25B4"; });
   }
-  wireSuggest("termsSuggestBtn","termsSuggestList",TERMS_IDEAS,"f_terms");
-  wireSuggest("evidenceSuggestBtn","evidenceSuggestList",EVIDENCE_IDEAS,"f_evidence");
+  /* These are worked examples of a CHECKABLE test, not text you can use verbatim.
+     Every specific in them \u2014 file names, section titles, word counts, issue numbers \u2014
+     is a placeholder for the real deliverable. Selecting the text and toasting a reminder
+     is what stops someone from testing a real evidence URL against someone else's file names,
+     which reads exactly like a broken jury when it is really just an unedited template. */
+  wireSuggest("termsSuggestBtn","termsSuggestList",TERMS_IDEAS,"f_terms",(el)=>{
+    el.focus(); el.select();
+    showToast("Now make it yours","This is a worked example. Replace the specific file names, numbers or sections with your actual deliverable \u2014 the jury checks these exact words.");
+  });
+  wireSuggest("evidenceSuggestBtn","evidenceSuggestList",EVIDENCE_IDEAS,"f_evidence",(el)=>{ el.focus(); });
 
   /* ---- live check: warn if the evidence URL is a page the jury can't read ---- */
   (function evidenceGuard(){
