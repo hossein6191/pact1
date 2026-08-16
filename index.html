@@ -1122,6 +1122,17 @@ unfulfilled"""
     }
     const d=parseInt(days,10);
     if(isNaN(d)||d<0){$("f_days").style.borderColor="#ff9d8a";setStatus($("createStatus"),"\u2717 Deadline must be a number (0 or more).");return;}
+    /* Catch an unedited template before it costs a deploy, a signature and a
+       deadline wait. Without this the jury reads a literal "[FILE NAME]", finds
+       nothing matching, and correctly rules not fulfilled \u2014 which reads to the
+       user as the jury being broken rather than the terms never being filled in. */
+    const leftover=terms.match(/\[[A-Z][^\]]*\]/g);
+    if(leftover){
+      $("f_terms").style.borderColor="#ff9d8a";
+      setStatus($("createStatus"),"\u2717 Your agreement still has "+leftover.length+" placeholder"+(leftover.length>1?"s":"")+" to fill in: "+leftover.join(", ")+
+        "\n\nThe jury matches your words literally against the evidence page. Left as-is it would look for the bracketed text itself, find nothing, and rule not fulfilled. Replace each one with the real file name, number or topic.");
+      $("f_terms").focus(); sFail(); return;
+    }
     if(partyb.toLowerCase()===account.toLowerCase()){
       if(!confirm("The counterparty is your own address. Continue anyway? (only sensible for testing)"))return;
     }
@@ -1442,17 +1453,22 @@ unfulfilled"""
   /* ---------------- suggestions ---------------- */
   /* Every one of these states a bar the jury can actually measure in page text.
      Vague briefs ("a good logo") are deliberately not offered \u2014 they always pass. */
+  /* Every specific detail is written as a [BRACKETED PLACEHOLDER] on purpose.
+     Earlier versions invented concrete values like "logo.svg in an assets folder";
+     users pasted them unedited against their own repo, the jury correctly ruled
+     not fulfilled, and it read like a broken jury. Brackets make the edit obvious,
+     and if one is missed the pre-flight check below catches it before deploy. */
   const TERMS_IDEAS=[
-    ["Freelance \u2014 design delivery","By the deadline, the linked repository contains the delivered design files: a file named logo.svg and a file named logo.png, both inside a folder named assets. Fulfilled only if both file names are visible on the linked page."],
-    ["Freelance \u2014 website build","By the deadline, the linked repository contains a README that documents the built site and lists, in text, at least these sections: Home, Pricing, Contact. Fulfilled only if all three section names appear."],
-    ["Freelance \u2014 article writing","By the deadline, the linked page shows a published article of at least 500 words about the agreed topic, containing a title, at least three subheadings, and a closing summary. Fulfilled only if the full text is visible on the page."],
-    ["Content \u2014 publish a post","By the deadline, the linked page shows a published post about the agreed topic that names the product at least three times and includes a link back to the project. Fulfilled only if that text is present."],
-    ["Open source \u2014 ship a feature","By the deadline, the linked repository page shows a release or changelog entry naming the agreed feature, plus a version number higher than the one at signing. Fulfilled only if both are visible in the page text."],
-    ["Open source \u2014 fix bugs","By the deadline, the linked issues page shows the agreed issue numbers with the status Closed. Fulfilled only if every one of those numbers is listed as closed."],
-    ["Docs \u2014 write a guide","By the deadline, the linked page shows a setup guide with numbered steps, a prerequisites list, and at least one code block. Fulfilled only if all three are visible in the text."],
-    ["Milestone \u2014 finish a course","By the deadline, the linked page shows a completion record naming the agreed course and the learner\u2019s name. Fulfilled only if both names appear on the page."],
-    ["Challenge \u2014 ship daily","By the deadline, the linked page lists a dated entry for each of the agreed days, with no gaps. Fulfilled only if every date in the range is present."],
-    ["Bet \u2014 public prediction","At the deadline, the linked public source states the outcome of the agreed event. Fulfilled only if that source states the predicted outcome happened."]
+    ["Freelance \u2014 design delivery","By the deadline, the linked repository contains a file named [FILE NAME, e.g. logo.svg]. Fulfilled only if that exact file name is visible on the linked page."],
+    ["Freelance \u2014 website build","By the deadline, the linked repository contains a README that lists, in text, these sections: [SECTION NAMES, e.g. Home, Pricing, Contact]. Fulfilled only if every one of those section names appears."],
+    ["Freelance \u2014 article writing","By the deadline, the linked page shows a published article of at least [WORD COUNT, e.g. 500] words about [TOPIC], containing a title and at least [NUMBER, e.g. 3] subheadings. Fulfilled only if the full text is visible on the page."],
+    ["Content \u2014 publish a post","By the deadline, the linked page shows a published post about [TOPIC] that mentions [WHAT MUST BE NAMED] at least [NUMBER, e.g. 3] times. Fulfilled only if that text is present."],
+    ["Open source \u2014 ship a feature","By the deadline, the linked repository page shows a release or changelog entry naming [FEATURE NAME], with a version number above [CURRENT VERSION]. Fulfilled only if both are visible in the page text."],
+    ["Open source \u2014 fix bugs","By the deadline, the linked issues page shows issues [ISSUE NUMBERS, e.g. #12, #14] with the status Closed. Fulfilled only if every one of those numbers is listed as closed."],
+    ["Docs \u2014 write a guide","By the deadline, the linked page shows a setup guide for [WHAT IT SETS UP] with numbered steps, a prerequisites list, and at least one code block. Fulfilled only if all three are visible in the text."],
+    ["Milestone \u2014 finish a course","By the deadline, the linked page shows a completion record naming the course [COURSE NAME] and the name [LEARNER NAME]. Fulfilled only if both appear on the page."],
+    ["Challenge \u2014 ship daily","By the deadline, the linked page lists a dated entry for every day from [START DATE] to [END DATE], with no gaps. Fulfilled only if every date in that range is present."],
+    ["Bet \u2014 public prediction","At the deadline, the linked public source states the outcome of [EVENT]. Fulfilled only if that source states [PREDICTED OUTCOME] happened."]
   ];
   const EVIDENCE_IDEAS=[
     ["GitHub repo","https://github.com/owner/repo"],
