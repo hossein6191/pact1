@@ -615,6 +615,57 @@ import json
 import datetime
 
 
+# The three-backtick code fence LLMs wrap JSON in. Built from a char code on
+# purpose: this file is embedded inside a JS String.raw template literal in
+# index.html, and a literal backtick here would terminate it.
+_FENCE = chr(96) * 3
+
+
+def _pick(d: dict, *names):
+    """LLMs rename fields. Accept the aliases they actually reach for."""
+    for n in names:
+        if n in d and d[n] is not None:
+            return d[n]
+    return None
+
+
+def _read_verdict(raw: str) -> tuple:
+    """Turn the model's answer into (verdict, reasoning).
+
+    Returns "unfulfilled" whenever the answer cannot be read with confidence.
+    Refusing to guess is the safe direction: a pact that wrongly reads as kept
+    is far worse than one that asks the parties to look again.
+    """
+    text = str(raw).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
+
+    verdict = ""
+    reasoning = ""
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and start < end:
+        try:
+            parsed = json.loads(text[start:end + 1])
+            if isinstance(parsed, dict):
+                verdict = str(_pick(parsed, "verdict", "result", "answer", "decision") or "").strip().lower()
+                reasoning = str(_pick(parsed, "reasoning", "reason", "explanation", "why") or "").strip()
+        except Exception:
+            pass
+
+    # No usable JSON: fall back to reading the bare words out of the text.
+    if verdict not in ("fulfilled", "unfulfilled"):
+        low = text.lower()
+        # "unfulfilled" contains "fulfilled", so it has to be tested first.
+        if "unfulfilled" in low or "not fulfilled" in low:
+            verdict = "unfulfilled"
+        elif "fulfilled" in low:
+            verdict = "fulfilled"
+        else:
+            verdict = "unfulfilled"
+
+    return verdict, reasoning
+
+
 class Pact(gl.Contract):
     party_a: Address
     party_b: Address
@@ -688,15 +739,23 @@ class Pact(gl.Contract):
         terms = self.terms
         url = self.evidence_url
 
-        # Only the boolean verdict goes through consensus (strict_eq on a single
-        # word), so validators reliably agree. The free-text reason is fetched
-        # separately and is allowed to vary.
-        def judge_bool() -> str:
+        # Each validator reads the page and judges it independently. Consensus is
+        # reached by comparing the two answers, not by demanding identical text:
+        # the verdict must agree exactly, while the wording of the reason is free.
+        # strict_eq cannot be used here because an LLM never repeats itself word
+        # for word, which is why the verdict used to be squeezed into one token.
+        def judge() -> str:
             page = gl.nondet.web.render(url, mode="text")
-            # An image URL, a login wall or a dead link all render to (almost) nothing.
-            # Decide that here instead of asking the model to reason about an empty page.
+
+            # An image URL, a login wall or a dead link all render to (almost)
+            # nothing. Decide that here rather than asking the model to reason
+            # about a blank page, where it is free to invent either answer.
             if len(page.strip()) < 40:
-                return "unfulfilled"
+                return json.dumps({
+                    "verdict": "unfulfilled",
+                    "reasoning": "The evidence page returned no readable text. That happens when the link points at an image file, a page that requires signing in, or a link that no longer resolves. Point it at a public page whose text shows the result.",
+                })
+
             prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
 
 THE AGREEMENT (plain language):
@@ -705,30 +764,37 @@ THE AGREEMENT (plain language):
 WHAT THE EVIDENCE PAGE ACTUALLY CONTAINS:
 {page}
 
-Read the evidence carefully and decide: based ONLY on what is actually present on the evidence page,
-were the agreement's requirements met?
-Be strict and literal. If the required result is not clearly visible on the page, it is not fulfilled.
+Decide, based ONLY on what is actually present on the evidence page, whether the agreement's
+requirements were met. Be strict and literal: if the required result is not clearly visible on
+the page, it is not fulfilled. Judge the words of the agreement as written, not what you assume
+was intended.
 
-Answer with ONLY one single lowercase word, nothing else:
-fulfilled
-or
-unfulfilled"""
-            out = gl.nondet.exec_prompt(prompt).strip().lower()
-            if "unfulfilled" in out:
-                return "unfulfilled"
-            if "fulfilled" in out:
-                return "fulfilled"
-            return "unfulfilled"
+Respond using ONLY this JSON format, nothing else:
+{{
+"verdict": "fulfilled" or "unfulfilled",
+"reasoning": "two or three sentences naming the specific thing on the page that decided it, or the specific thing that was missing"
+}}
+Your output must be only JSON, with no prefix, suffix or code fence, and must parse cleanly."""
 
-        result = gl.eq_principle.strict_eq(judge_bool)
+            out = gl.nondet.exec_prompt(prompt)
+            return str(out).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
+
+        raw = gl.eq_principle.prompt_comparative(
+            judge,
+            "The value of the verdict field has to match exactly. "
+            "The reasoning field only has to reach the same conclusion; "
+            "different wording is expected and acceptable.",
+        )
+
+        result, reasoning = _read_verdict(raw)
 
         self.is_settled = True
         if result == "fulfilled":
             self.verdict = "fulfilled"
-            self.last_reasoning = "The jury read the evidence page and found the agreement's requirements were met."
+            self.last_reasoning = reasoning or "The jury read the evidence page and found the agreement's requirements were met."
         else:
             self.verdict = "not_fulfilled"
-            self.last_reasoning = "The jury read the evidence page but did not find proof the agreement was met. Check that the evidence URL points to exactly where the result should appear."
+            self.last_reasoning = reasoning or "The jury read the evidence page but did not find proof the agreement was met. Check that the evidence URL points to exactly where the result should appear."
 
         return self.verdict
 
