@@ -5,7 +5,19 @@
 **Network:** GenLayer Studio Network (chain `61999`)
 
 **Live site:** https://pact1.vercel.app
-**Demo video:** _add your video link here_
+
+### Watch it run
+
+Two screen recordings of a real pact going through its whole life on the Studio network. Both are **downloads, around 29 MB each** — GitHub serves release files rather than streaming them, so they save to your machine and play locally.
+
+| Recording | What it shows |
+|---|---|
+| [**fulfilled.mp4** ↓](https://github.com/hossein6191/pact1/releases/download/v1.0/fulfilled.mp4) | The evidence page contains the delivered file. The jury rules **FULFILLED**. |
+| [**notfulfilled.mp4** ↓](https://github.com/hossein6191/pact1/releases/download/v1.0/notfulfilled.mp4) | The *same* agreement text, pointed at a repository without the file. The jury rules **NOT FULFILLED**. |
+
+Watched together they make the point the project rests on: identical words, identical jury, opposite verdicts, decided by what was actually on the page.
+
+In a hurry? The two demo buttons below do the same thing in one click, live from the chain, with nothing to download.
 
 ### See it work without deploying anything
 
