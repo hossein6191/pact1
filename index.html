@@ -1057,10 +1057,22 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     if(s.party_b && a===String(s.party_b).toLowerCase())return "B";
     return "observer";
   }
-  function expectedReached(fnName,s){
+  /* What "it landed" means, per method. A method missing from this list can never
+     satisfy the poll, so the page keeps saying it is still working long after the
+     chain finalized it \u2014 which is exactly what filing evidence did until this
+     grew the two methods that were added underneath it. */
+  function bigOr0(v){ try{ return BigInt(v||0); }catch(e){ return BigInt(0); } }
+  function expectedReached(fnName,s,prev){
     if(fnName==="sign")return s.signed_b===true;
     if(fnName==="settle")return s.is_settled===true;
     if(fnName==="cancel")return s.is_settled===true;
+    if(fnName==="submit_evidence"){
+      if(!s.evidence_url) return false;
+      if(!prev || !prev.evidence_url) return true;
+      /* replacing evidence: the url may repeat, the filing time will not */
+      return s.evidence_url!==prev.evidence_url || String(s.evidence_at)!==String(prev.evidence_at);
+    }
+    if(fnName==="fund")return bigOr0(s.escrow)>bigOr0(prev&&prev.escrow);
     return false;
   }
   var provis={};
@@ -1212,7 +1224,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       '<div class="tx-bar"><i></i></div>';
   }
   function clearFinalizingNote(){ var el=document.getElementById("finalNote"); if(el)el.remove(); }
-  async function waitForStateChange(fnName,beforeKey,maxPolls){
+  async function waitForStateChange(fnName,beforeKey,maxPolls,prev){
     var readClient=createClient({chain:CHAIN});
     for(var i=0;i<maxPolls;i++){
       await sleep(4000);
@@ -1220,7 +1232,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
         var raw=await readClient.readContract({address:loadedContract,functionName:"get_status",args:[]});
         var s=typeof raw==="string"?JSON.parse(raw):raw;
         renderStatus(s);
-        if(expectedReached(fnName,s)) return true;
+        if(expectedReached(fnName,s,prev)) return true;
       }catch(e){}
     }
     return false;
@@ -2051,6 +2063,8 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     if(needWallet())return;
     if(!loadedContract){alert("Load a pact first.");return;}
     const before = currentStatus ? stateKey(currentStatus) : null;
+    /* snapshot, not a reference: renderStatus overwrites currentStatus on every poll */
+    const beforeStatus = currentStatus ? JSON.parse(JSON.stringify(currentStatus)) : null;
     const addr = loadedContract;
     setStatus($("actionStatus"),"Confirm in your wallet\u2026",true);
     showTracker("actionTx","Waiting for your wallet\u2026","");
@@ -2068,7 +2082,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       hideWait(); hideJudge(); clearTracker("actionTx");
       return handleTxError(err,"actionStatus");
     }
-    const changed = await waitForStateChange(fnName,before,75);
+    const changed = await waitForStateChange(fnName,before,75,beforeStatus);
     hideWait(); hideJudge();
     if(changed){
       clearTracker("actionTx");
