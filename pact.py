@@ -3,13 +3,78 @@
 
 from genlayer import *
 import json
+import hashlib
 import datetime
-
 
 # The three-backtick code fence LLMs wrap JSON in. Built from a char code on
 # purpose: this file is embedded inside a JS String.raw template literal in
 # index.html, and a literal backtick here would terminate it.
 _FENCE = chr(96) * 3
+
+# Paying an ordinary wallet is an external message to the chain layer, which is
+# reached through the EVM interface even though the recipient is not a contract.
+@gl.evm.contract_interface
+class _Payee:
+    class View:
+        pass
+
+    class Write:
+        pass
+
+
+_HEX = "0123456789abcdef"
+_RAW = "https://raw.githubusercontent.com/"
+
+
+def _is_commit_hash(s: str) -> bool:
+    if len(s) != 40:
+        return False
+    low = s.lower()
+    for ch in low:
+        if ch not in _HEX:
+            return False
+    return True
+
+
+def _pin_error(url: str) -> str:
+    """Empty string if the URL names an immutable artifact, else why it does not.
+
+    A git commit hash is a hash over the exact tree it points at, so bytes served
+    for that hash cannot be swapped later without the hash changing. A branch name
+    points at whatever the branch holds today, which is the hole this closes.
+    """
+    u = url.strip()
+    if not u.startswith(_RAW):
+        return ("Evidence has to be a commit pinned GitHub raw file, so it must start "
+                "with " + _RAW + " . Anything else can be edited after both parties sign.")
+    parts = u[len(_RAW):].split("/")
+    if len(parts) < 4:
+        return "The link is missing the owner, the repository, the commit hash or the file path."
+    if not _is_commit_hash(parts[2]):
+        return ("The third segment has to be a full 40 character commit hash, not '"
+                + parts[2] + "'. A branch name can be rewritten after signing.")
+    if parts[3] == "":
+        return "The link carries a commit hash but no file path after it."
+    return ""
+
+
+_IMG_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg")
+
+
+def _is_image(url: str) -> bool:
+    low = url.strip().lower()
+    for e in _IMG_EXT:
+        if low.endswith(e):
+            return True
+    return False
+
+
+def _commit_of(url: str) -> str:
+    """The commit hash out of an already validated pinned URL."""
+    parts = url.strip()[len(_RAW):].split("/")
+    if len(parts) >= 3:
+        return parts[2].lower()
+    return ""
 
 
 def _pick(d: dict, *names):
@@ -63,7 +128,6 @@ class Pact(gl.Contract):
     identity_a: str
     identity_b: str
     terms: str
-    evidence_url: str
     deadline: u64
     signed_a: bool
     signed_b: bool
@@ -73,16 +137,21 @@ class Pact(gl.Contract):
     last_reasoning: str
     is_minted: bool
     token_id: str
+    evidence_url: str
+    evidence_by: str
+    evidence_at: u64
+    evidence_digest: str
+    escrow: u256
+    paid_to: str
 
     def __init__(self, party_b: str, identity_a: str, identity_b: str,
-                 terms: str, evidence_url: str, deadline_days: int):
+                 terms: str, deadline_seconds: int):
         self.party_a = gl.message.sender_address
         self.party_b = Address(party_b)
         self.identity_a = identity_a
         self.identity_b = identity_b
         self.terms = terms
-        self.evidence_url = evidence_url
-        self.deadline = self._now() + u64(deadline_days) * u64(86400)
+        self.deadline = self._now() + u64(deadline_seconds)
         self.signed_a = True
         self.signed_b = False
         self.is_active = False
@@ -91,6 +160,12 @@ class Pact(gl.Contract):
         self.last_reasoning = ""
         self.is_minted = False
         self.token_id = ""
+        self.evidence_url = ""
+        self.evidence_by = ""
+        self.evidence_at = u64(0)
+        self.evidence_digest = ""
+        self.escrow = u256(0)
+        self.paid_to = ""
 
     def _now(self) -> u64:
         return u64(int(datetime.datetime.now(datetime.timezone.utc).timestamp()))
@@ -99,6 +174,34 @@ class Pact(gl.Contract):
         # deterministic token id (no time) so validators always agree
         self.token_id = "PACT-" + self.party_a.as_hex[2:10] + "-" + self.party_b.as_hex[2:10]
         self.is_minted = True
+
+    def _release(self, to: Address) -> None:
+        """Move the whole escrow once, and never leave it stranded.
+
+        Every path that ends a pact calls this, so the money always has somewhere
+        to go. The balance is zeroed before the transfer is queued: the transfer
+        itself lands when this transaction finalizes, not when it is accepted.
+        """
+        amount = self.escrow
+        if amount == u256(0):
+            return
+        self.escrow = u256(0)
+        self.paid_to = to.as_hex
+        _Payee(to).emit_transfer(value=amount)
+
+    @gl.public.write.payable
+    def fund(self) -> None:
+        assert gl.message.sender_address == self.party_a, "Only the party who drafted this pact can fund it"
+        assert not self.is_settled, "This pact is already settled"
+        v = gl.message.value
+        assert v > u256(0), "Send an amount greater than zero"
+        self.escrow = self.escrow + v
+
+    @gl.public.write.payable
+    def __receive__(self) -> None:
+        """A plain transfer with no method name lands here and joins the escrow."""
+        assert not self.is_settled, "This pact is already settled"
+        self.escrow = self.escrow + gl.message.value
 
     @gl.public.write
     def sign(self) -> None:
@@ -111,6 +214,25 @@ class Pact(gl.Contract):
             self._mint()
 
     @gl.public.write
+    def submit_evidence(self, url: str) -> None:
+        """The obligated party files their own proof, on chain, before the deadline.
+
+        This is the half the drafter used to control. Now the side that owes the
+        work names the artifact, signs that act with their own wallet, and does it
+        inside a window both parties agreed to. It can be replaced while the window
+        is open, so a wrong link is fixable, and it is frozen the moment it closes.
+        """
+        assert self.is_active, "Both parties must sign before evidence can be filed"
+        assert not self.is_settled, "This pact is already settled"
+        assert gl.message.sender_address == self.party_b, "Only the obligated party can file evidence"
+        assert self._now() < self.deadline, "The deadline has passed, evidence is closed"
+        problem = _pin_error(url)
+        assert problem == "", problem
+        self.evidence_url = url.strip()
+        self.evidence_by = gl.message.sender_address.as_hex
+        self.evidence_at = self._now()
+
+    @gl.public.write
     def cancel(self) -> None:
         assert not self.is_active, "An active pact cannot be cancelled"
         assert not self.is_settled, "This pact is already settled"
@@ -119,51 +241,105 @@ class Pact(gl.Contract):
         assert is_party, "Only a party to this pact can cancel it"
         self.is_settled = True
         self.verdict = "cancelled"
+        self.last_reasoning = "Cancelled before it went live. Anything funded returns to the party who funded it."
+        self._release(self.party_a)
 
     @gl.public.write
     def settle(self) -> str:
         assert self.is_active, "Both parties must sign before judging"
         assert not self.is_settled, "This pact is already settled"
-        now = self._now()
-        assert now >= self.deadline, "The deadline has not passed yet"
+        assert self._now() >= self.deadline, "The deadline has not passed yet"
 
-        terms = self.terms
+        # Nothing was ever filed. Close it without asking a model to reason about
+        # an absence, and send the money back.
+        if self.evidence_url == "":
+            self.is_settled = True
+            self.verdict = "not_fulfilled"
+            self.last_reasoning = ("No evidence was filed before the deadline closed. There is "
+                                   "nothing to read, so the pact closes unfulfilled and anything "
+                                   "escrowed returns to the party who funded it.")
+            self._release(self.party_a)
+            return self.verdict
+
         url = self.evidence_url
+        terms = self.terms
 
-        # Each validator reads the page and judges it independently. Consensus is
-        # reached by comparing the two answers, not by demanding identical text:
-        # the verdict must agree exactly, while the wording of the reason is free.
-        # strict_eq cannot be used here because an LLM never repeats itself word
-        # for word, which is why the verdict used to be squeezed into one token.
+        # An image has no text for validators to agree on, so the two halves of the
+        # guarantee split: the commit hash fixes the bytes, and the jury looks at the
+        # picture. The answer is held to a tight shape on purpose. Left free the models
+        # write a paragraph of thinking each, the paragraphs never match, and consensus
+        # fails on wording rather than on what anyone actually saw.
+        if _is_image(url):
+            self.evidence_digest = "git-commit:" + _commit_of(url)
+
+            def look() -> str:
+                shot = gl.nondet.web.render(url, mode="screenshot")
+                prompt = ("You are a neutral arbitrator deciding whether a delivered image meets an agreement.\n\n"
+                          "THE AGREEMENT:\n" + terms + "\n\n"
+                          "You are looking at the delivered image itself. Judge only what is visibly there. "
+                          "Do not judge taste, quality or effort.\n\n"
+                          "Respond with ONLY this JSON and nothing else. No preamble, no reasoning out loud, no code fence:\n"
+                          '{"verdict": "fulfilled" or "unfulfilled", "reasoning": "at most 12 words naming what you actually see"}')
+                out = gl.nondet.exec_prompt(prompt, images=[shot])
+                return str(out).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
+
+            raw = gl.eq_principle.prompt_comparative(
+                look,
+                "The value of the verdict field has to match exactly. "
+                "The reasoning field only has to describe the same image and reach the same conclusion.",
+            )
+            result, reasoning = _read_verdict(raw)
+            self.is_settled = True
+            if result == "fulfilled":
+                self.verdict = "fulfilled"
+                self.last_reasoning = reasoning or "The jury looked at the delivered image and found it met the agreement."
+                self._release(self.party_b)
+            else:
+                self.verdict = "not_fulfilled"
+                self.last_reasoning = reasoning or "The jury looked at the delivered image and did not find what the agreement asked for."
+                self._release(self.party_a)
+            return self.verdict
+
+        # Step one is deterministic on purpose. Every validator has to come back
+        # with byte identical content before anyone is asked to judge it, and the
+        # hash of exactly what was judged is written on chain so a reader can fetch
+        # the same pinned artifact and confirm they are looking at the same bytes.
+        def grab() -> str:
+            return gl.nondet.web.render(url, mode="text")
+
+        page = gl.eq_principle.strict_eq(grab)
+        digest = hashlib.sha256(page.encode("utf-8")).hexdigest()
+        self.evidence_digest = digest
+
+        if len(page.strip()) < 40:
+            self.is_settled = True
+            self.verdict = "not_fulfilled"
+            self.last_reasoning = ("The pinned artifact came back empty or missing, which happens "
+                                   "when the commit or the path is wrong. There was nothing to "
+                                   "judge, so the escrow returns to the party who funded it.")
+            self._release(self.party_a)
+            return self.verdict
+
+        # Step two is the judgment, and it runs over the content the validators
+        # already agreed on rather than over whatever each of them happened to fetch.
         def judge() -> str:
-            page = gl.nondet.web.render(url, mode="text")
-
-            # An image URL, a login wall or a dead link all render to (almost)
-            # nothing. Decide that here rather than asking the model to reason
-            # about a blank page, where it is free to invent either answer.
-            if len(page.strip()) < 40:
-                return json.dumps({
-                    "verdict": "unfulfilled",
-                    "reasoning": "The evidence page returned no readable text. That happens when the link points at an image file, a page that requires signing in, or a link that no longer resolves. Point it at a public page whose text shows the result.",
-                })
-
             prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
 
 THE AGREEMENT (plain language):
 {terms}
 
-WHAT THE EVIDENCE PAGE ACTUALLY CONTAINS:
+THE EVIDENCE ARTIFACT (fixed at commit {url}, identical for every validator):
 {page}
 
-Decide, based ONLY on what is actually present on the evidence page, whether the agreement's
-requirements were met. Be strict and literal: if the required result is not clearly visible on
-the page, it is not fulfilled. Judge the words of the agreement as written, not what you assume
-was intended.
+Decide, based ONLY on what is actually present in the artifact above, whether the agreement's
+requirements were met. Be strict and literal: if the required result is not clearly present,
+it is not fulfilled. Judge the words of the agreement as written, not what you assume was
+intended.
 
 Respond using ONLY this JSON format, nothing else:
 {{
 "verdict": "fulfilled" or "unfulfilled",
-"reasoning": "two or three sentences naming the specific thing on the page that decided it, or the specific thing that was missing"
+"reasoning": "two or three sentences naming the specific thing in the artifact that decided it, or the specific thing that was missing"
 }}
 Your output must be only JSON, with no prefix, suffix or code fence, and must parse cleanly."""
 
@@ -182,10 +358,12 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
         self.is_settled = True
         if result == "fulfilled":
             self.verdict = "fulfilled"
-            self.last_reasoning = reasoning or "The jury read the evidence page and found the agreement's requirements were met."
+            self.last_reasoning = reasoning or "The jury read the pinned artifact and found the agreement's requirements were met."
+            self._release(self.party_b)
         else:
             self.verdict = "not_fulfilled"
-            self.last_reasoning = reasoning or "The jury read the evidence page but did not find proof the agreement was met. Check that the evidence URL points to exactly where the result should appear."
+            self.last_reasoning = reasoning or "The jury read the pinned artifact but did not find proof the agreement was met."
+            self._release(self.party_a)
 
         return self.verdict
 
@@ -197,7 +375,6 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
             "identity_a": self.identity_a,
             "identity_b": self.identity_b,
             "terms": self.terms,
-            "evidence_url": self.evidence_url,
             "deadline": int(self.deadline),
             "signed_a": self.signed_a,
             "signed_b": self.signed_b,
@@ -207,4 +384,10 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
             "last_reasoning": self.last_reasoning,
             "is_minted": self.is_minted,
             "token_id": self.token_id,
+            "evidence_url": self.evidence_url,
+            "evidence_by": self.evidence_by,
+            "evidence_at": int(self.evidence_at),
+            "evidence_digest": self.evidence_digest,
+            "escrow": str(int(self.escrow)),
+            "paid_to": self.paid_to,
         })

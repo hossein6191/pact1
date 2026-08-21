@@ -137,7 +137,7 @@
   input::placeholder,textarea::placeholder{color:#5d5981}
   .mono{font-family:var(--mono);font-size:13.5px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .row-ev{display:grid;grid-template-columns:1fr 170px;gap:16px}
+  .row-ev{display:grid;grid-template-columns:1fr 250px;gap:16px}
   @media(max-width:640px){.row2,.row-ev{grid-template-columns:1fr}}
 
   button{font-family:inherit;font-size:15px;cursor:pointer;border:none;border-radius:13px;padding:13px 24px;
@@ -380,7 +380,7 @@
     </div>
   </div>
   <div class="pillars reveal">
-    <div class="pillar"><div class="ic">⚖</div><b>An AI jury rules</b><p>At the deadline, independent validators read the evidence page and must agree on the verdict.</p></div>
+    <div class="pillar"><div class="ic">⚖</div><b>An AI jury rules</b><p>At the deadline, validators read one commit-pinned file, must agree on the verdict, and the verdict releases the escrow.</p></div>
     <div class="pillar"><div class="ic">✍</div><b>Both parties really sign</b><p>Two wallet signatures, one from each side. The pact only goes live when both are on-chain.</p></div>
     <div class="pillar"><div class="ic">🔗</div><b>Verifiable end to end</b><p>Every step — draft, signatures, token, verdict — is recorded on-chain and open to inspect.</p></div>
   </div>
@@ -407,7 +407,7 @@
     <label for="f_terms">The agreement, in plain words<span class="req">*</span></label>
     <textarea id="f_terms" rows="3" placeholder="e.g. Sara delivers the finished logo to the repo by Friday."></textarea>
     <div class="tn-note" style="background:rgba(143,123,255,.07);border-color:rgba(188,162,255,.28)">
-      <b>Write a test, not a wish.</b> The jury reads the <i>text</i> of your evidence page and checks it
+      <b>Write a test, not a wish.</b> The jury reads the <i>text inside one pinned file</i> and checks it
       against these words. It is good at facts it can see, and it cannot judge taste or effort.<br />
       <b style="color:var(--ok)">Checkable:</b> “a file named <code>logo.svg</code> exists in the repo” ·
       “the post is at least 500 words and mentions X, Y and Z” · “the README lists a Pricing section”.<br />
@@ -434,19 +434,36 @@
 
     <div class="row-ev">
       <div>
-        <label for="f_evidence">Evidence URL (what the AI reads)<span class="req">*</span></label>
-        <input id="f_evidence" class="mono" placeholder="https://github.com/.../repo" />
+        <label for="f_escrow">Escrow (GEN)<span class="req">*</span></label>
+        <input id="f_escrow" type="number" min="0" step="0.01" placeholder="e.g. 5" />
       </div>
-      <div><label for="f_days">Deadline (days)<span class="req">*</span></label><input id="f_days" type="number" min="0" placeholder="e.g. 7" /></div>
+      <div>
+        <label for="f_days">Deadline<span class="req">*</span></label>
+        <div style="display:flex;gap:8px">
+          <input id="f_days" type="number" min="1" placeholder="e.g. 7" style="flex:1" />
+          <select id="f_unit" style="flex:0 0 105px">
+            <option value="86400" selected>days</option>
+            <option value="3600">hours</option>
+            <option value="60">minutes</option>
+          </select>
+        </div>
+      </div>
     </div>
     <div class="tn-note">
-      <b>⚠ The page must be public and readable without logging in.</b><br />
-      <b style="color:var(--ok)">Works:</b> GitHub files and repos, raw.githubusercontent.com, blog posts, docs, any plain public web page.<br />
-      <b style="color:var(--bad)">Doesn't work:</b> X/Twitter, Instagram, LinkedIn, Discord, private Google Docs. These block automated reading, so the jury sees an empty page and rules not fulfilled.<br />
-      <span style="opacity:.85">Quick test: open the link in a private/incognito window. If you can see the proof there without signing in, the jury can too.</span>
+      <b>💰 The verdict moves the money.</b> You lock this amount in the pact when you create it.
+      If the jury rules <b style="color:var(--ok)">FULFILLED</b> it goes to the counterparty. If it rules
+      <b style="color:var(--bad)">NOT FULFILLED</b>, or nothing is filed before the deadline, it comes back to you.
+      Nobody else can touch it, including us.<br />
+      <span style="opacity:.85">Enter <b>0</b> to make a pact that only records a verdict and moves no money. The site will say so plainly.</span>
     </div>
-    <button type="button" class="suggest-btn" id="evidenceSuggestBtn">What kind of page? ▾</button>
-    <div class="suggest-list hidden" id="evidenceSuggestList"></div>
+    <div class="tn-note">
+      <b>📎 Evidence is filed later, by the counterparty.</b> You are not choosing what the jury reads.
+      After both of you sign, the counterparty files one <b>commit-pinned GitHub file</b> as their proof,
+      from their own wallet, before the deadline. It can be a text file, which the jury reads, or an
+      image, which the jury renders and looks at. A commit hash fixes the exact bytes, so what the jury
+      reads cannot be swapped afterwards — by them or by you.<br />
+      <span style="opacity:.85">You will be able to see exactly what they filed, and when, before the deadline closes.</span>
+    </div>
 
     <p style="font-size:12px;color:var(--muted-2);margin-top:20px"><span class="req">*</span> All fields are required. You'll review and sign the pact on the next screen.</p>
     <div class="btn-row"><button class="btn-primary" id="reviewBtn">Review &amp; sign ✎</button><button class="btn-ghost" id="newDraftBtn">Start a new draft</button></div>
@@ -464,7 +481,7 @@
       <div style="margin-top:16px">
         <div class="kv"><span>Party A (creator)</span><b id="pv_a" class="dim">connect your wallet</b></div>
         <div class="kv"><span>Party B (counterparty)</span><b id="pv_b" class="dim">not set</b></div>
-        <div class="kv"><span>Evidence the jury will read</span><b id="pv_evidence" class="dim">not set</b></div>
+        <div class="kv"><span>Escrow held by this pact</span><b id="pv_evidence" class="dim">not set</b></div>
         <div class="kv"><span>Can be judged after</span><b id="pv_deadline" class="dim">not set</b></div>
       </div>
       <div class="sigs">
@@ -509,8 +526,26 @@
       </div>
 
       <dl id="statusGrid"></dl>
+
+      <div class="hidden" id="evidencePanel">
+        <label for="f_ev">Your evidence · one commit-pinned GitHub file<span class="req">*</span></label>
+        <input id="f_ev" class="mono" placeholder="https://raw.githubusercontent.com/owner/repo/&lt;40-char commit&gt;/path" />
+        <div class="tn-note" id="evGuide">
+          <b>Why it has to be pinned.</b> A branch link like <span class="mono">/main/</span> points at whatever the branch
+          holds today, so its contents can change after the jury has ruled. A commit hash is a hash of the exact files,
+          so the bytes the jury reads are fixed forever and anyone can re-check them.<br />
+          <span style="opacity:.85">Paste any normal GitHub file link and press <b>Pin it for me</b> — it will look up the
+          current commit and convert the link for you.</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn-ghost" id="pinBtn">📌 Pin it for me</button>
+          <button class="btn-primary" id="fileEvBtn">File this as my evidence</button>
+        </div>
+      </div>
+
       <div class="btn-row">
         <button class="btn-primary hidden" id="signBtn">Review &amp; sign this pact ✎</button>
+        <button class="btn-ghost hidden" id="topUpBtn">Add escrow 💰</button>
         <button class="btn-ghost" id="settleBtn" disabled>Settle (ask the AI jury) ⚖</button>
         <button class="btn-danger" id="cancelBtn" disabled>Cancel pact</button>
       </div>
@@ -564,13 +599,14 @@
 <div class="modal hidden" id="welcomeModal">
   <div class="modal-box">
     <h3>Welcome to Pact</h3>
-    <p>A pact is a two-person agreement that lives on the blockchain. You write it in plain words, both people sign it with their wallets, and when the deadline arrives an AI jury reads the evidence online and decides whether it was kept.</p>
+    <p>A pact is a two-person agreement that lives on the blockchain. You write it in plain words, both people sign it with their wallets, one of you locks up an amount, and when the deadline arrives an AI jury reads the filed evidence and decides who the money goes to.</p>
     <ol>
-      <li><b>Draft a pact:</b> write the deal, add the other person's address, and link both identities.</li>
+      <li><b>Draft and fund:</b> write the deal, add the other person's address, link both identities, and lock the amount the verdict will release.</li>
       <li><b>Both sign:</b> you sign when you create it; the other person opens it and signs too. Once <b>both</b> have signed, the pact goes live and a unique signature token is minted on-chain.</li>
-      <li><b>Settle:</b> after the deadline, anyone can ask the AI jury to read the evidence and rule whether the agreement was fulfilled.</li>
+      <li><b>They file the proof:</b> before the deadline, the counterparty files one commit-pinned file as their evidence, from their own wallet. A commit hash fixes the exact bytes, so nobody can swap what the jury reads.</li>
+      <li><b>Settle:</b> after the deadline, either party asks the jury to read it. The verdict is recorded on-chain <i>and</i> sends the escrow to the counterparty or back to you.</li>
     </ol>
-    <p style="font-size:12.5px;opacity:.8">A demo on the GenLayer Studio network. The jury records a verdict; no funds move. Not financial or legal advice.</p>
+    <p style="font-size:12.5px;opacity:.8">A demo on the GenLayer Studio network, using test GEN. The verdict releases the escrow automatically. Not financial or legal advice.</p>
     <button class="gotit" id="welcomeGotit">Got it — let's go</button>
   </div>
 </div>
@@ -612,13 +648,78 @@
 
 from genlayer import *
 import json
+import hashlib
 import datetime
-
 
 # The three-backtick code fence LLMs wrap JSON in. Built from a char code on
 # purpose: this file is embedded inside a JS String.raw template literal in
 # index.html, and a literal backtick here would terminate it.
 _FENCE = chr(96) * 3
+
+# Paying an ordinary wallet is an external message to the chain layer, which is
+# reached through the EVM interface even though the recipient is not a contract.
+@gl.evm.contract_interface
+class _Payee:
+    class View:
+        pass
+
+    class Write:
+        pass
+
+
+_HEX = "0123456789abcdef"
+_RAW = "https://raw.githubusercontent.com/"
+
+
+def _is_commit_hash(s: str) -> bool:
+    if len(s) != 40:
+        return False
+    low = s.lower()
+    for ch in low:
+        if ch not in _HEX:
+            return False
+    return True
+
+
+def _pin_error(url: str) -> str:
+    """Empty string if the URL names an immutable artifact, else why it does not.
+
+    A git commit hash is a hash over the exact tree it points at, so bytes served
+    for that hash cannot be swapped later without the hash changing. A branch name
+    points at whatever the branch holds today, which is the hole this closes.
+    """
+    u = url.strip()
+    if not u.startswith(_RAW):
+        return ("Evidence has to be a commit pinned GitHub raw file, so it must start "
+                "with " + _RAW + " . Anything else can be edited after both parties sign.")
+    parts = u[len(_RAW):].split("/")
+    if len(parts) < 4:
+        return "The link is missing the owner, the repository, the commit hash or the file path."
+    if not _is_commit_hash(parts[2]):
+        return ("The third segment has to be a full 40 character commit hash, not '"
+                + parts[2] + "'. A branch name can be rewritten after signing.")
+    if parts[3] == "":
+        return "The link carries a commit hash but no file path after it."
+    return ""
+
+
+_IMG_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg")
+
+
+def _is_image(url: str) -> bool:
+    low = url.strip().lower()
+    for e in _IMG_EXT:
+        if low.endswith(e):
+            return True
+    return False
+
+
+def _commit_of(url: str) -> str:
+    """The commit hash out of an already validated pinned URL."""
+    parts = url.strip()[len(_RAW):].split("/")
+    if len(parts) >= 3:
+        return parts[2].lower()
+    return ""
 
 
 def _pick(d: dict, *names):
@@ -672,7 +773,6 @@ class Pact(gl.Contract):
     identity_a: str
     identity_b: str
     terms: str
-    evidence_url: str
     deadline: u64
     signed_a: bool
     signed_b: bool
@@ -682,16 +782,21 @@ class Pact(gl.Contract):
     last_reasoning: str
     is_minted: bool
     token_id: str
+    evidence_url: str
+    evidence_by: str
+    evidence_at: u64
+    evidence_digest: str
+    escrow: u256
+    paid_to: str
 
     def __init__(self, party_b: str, identity_a: str, identity_b: str,
-                 terms: str, evidence_url: str, deadline_days: int):
+                 terms: str, deadline_seconds: int):
         self.party_a = gl.message.sender_address
         self.party_b = Address(party_b)
         self.identity_a = identity_a
         self.identity_b = identity_b
         self.terms = terms
-        self.evidence_url = evidence_url
-        self.deadline = self._now() + u64(deadline_days) * u64(86400)
+        self.deadline = self._now() + u64(deadline_seconds)
         self.signed_a = True
         self.signed_b = False
         self.is_active = False
@@ -700,6 +805,12 @@ class Pact(gl.Contract):
         self.last_reasoning = ""
         self.is_minted = False
         self.token_id = ""
+        self.evidence_url = ""
+        self.evidence_by = ""
+        self.evidence_at = u64(0)
+        self.evidence_digest = ""
+        self.escrow = u256(0)
+        self.paid_to = ""
 
     def _now(self) -> u64:
         return u64(int(datetime.datetime.now(datetime.timezone.utc).timestamp()))
@@ -708,6 +819,34 @@ class Pact(gl.Contract):
         # deterministic token id (no time) so validators always agree
         self.token_id = "PACT-" + self.party_a.as_hex[2:10] + "-" + self.party_b.as_hex[2:10]
         self.is_minted = True
+
+    def _release(self, to: Address) -> None:
+        """Move the whole escrow once, and never leave it stranded.
+
+        Every path that ends a pact calls this, so the money always has somewhere
+        to go. The balance is zeroed before the transfer is queued: the transfer
+        itself lands when this transaction finalizes, not when it is accepted.
+        """
+        amount = self.escrow
+        if amount == u256(0):
+            return
+        self.escrow = u256(0)
+        self.paid_to = to.as_hex
+        _Payee(to).emit_transfer(value=amount)
+
+    @gl.public.write.payable
+    def fund(self) -> None:
+        assert gl.message.sender_address == self.party_a, "Only the party who drafted this pact can fund it"
+        assert not self.is_settled, "This pact is already settled"
+        v = gl.message.value
+        assert v > u256(0), "Send an amount greater than zero"
+        self.escrow = self.escrow + v
+
+    @gl.public.write.payable
+    def __receive__(self) -> None:
+        """A plain transfer with no method name lands here and joins the escrow."""
+        assert not self.is_settled, "This pact is already settled"
+        self.escrow = self.escrow + gl.message.value
 
     @gl.public.write
     def sign(self) -> None:
@@ -720,6 +859,25 @@ class Pact(gl.Contract):
             self._mint()
 
     @gl.public.write
+    def submit_evidence(self, url: str) -> None:
+        """The obligated party files their own proof, on chain, before the deadline.
+
+        This is the half the drafter used to control. Now the side that owes the
+        work names the artifact, signs that act with their own wallet, and does it
+        inside a window both parties agreed to. It can be replaced while the window
+        is open, so a wrong link is fixable, and it is frozen the moment it closes.
+        """
+        assert self.is_active, "Both parties must sign before evidence can be filed"
+        assert not self.is_settled, "This pact is already settled"
+        assert gl.message.sender_address == self.party_b, "Only the obligated party can file evidence"
+        assert self._now() < self.deadline, "The deadline has passed, evidence is closed"
+        problem = _pin_error(url)
+        assert problem == "", problem
+        self.evidence_url = url.strip()
+        self.evidence_by = gl.message.sender_address.as_hex
+        self.evidence_at = self._now()
+
+    @gl.public.write
     def cancel(self) -> None:
         assert not self.is_active, "An active pact cannot be cancelled"
         assert not self.is_settled, "This pact is already settled"
@@ -728,51 +886,105 @@ class Pact(gl.Contract):
         assert is_party, "Only a party to this pact can cancel it"
         self.is_settled = True
         self.verdict = "cancelled"
+        self.last_reasoning = "Cancelled before it went live. Anything funded returns to the party who funded it."
+        self._release(self.party_a)
 
     @gl.public.write
     def settle(self) -> str:
         assert self.is_active, "Both parties must sign before judging"
         assert not self.is_settled, "This pact is already settled"
-        now = self._now()
-        assert now >= self.deadline, "The deadline has not passed yet"
+        assert self._now() >= self.deadline, "The deadline has not passed yet"
 
-        terms = self.terms
+        # Nothing was ever filed. Close it without asking a model to reason about
+        # an absence, and send the money back.
+        if self.evidence_url == "":
+            self.is_settled = True
+            self.verdict = "not_fulfilled"
+            self.last_reasoning = ("No evidence was filed before the deadline closed. There is "
+                                   "nothing to read, so the pact closes unfulfilled and anything "
+                                   "escrowed returns to the party who funded it.")
+            self._release(self.party_a)
+            return self.verdict
+
         url = self.evidence_url
+        terms = self.terms
 
-        # Each validator reads the page and judges it independently. Consensus is
-        # reached by comparing the two answers, not by demanding identical text:
-        # the verdict must agree exactly, while the wording of the reason is free.
-        # strict_eq cannot be used here because an LLM never repeats itself word
-        # for word, which is why the verdict used to be squeezed into one token.
+        # An image has no text for validators to agree on, so the two halves of the
+        # guarantee split: the commit hash fixes the bytes, and the jury looks at the
+        # picture. The answer is held to a tight shape on purpose. Left free the models
+        # write a paragraph of thinking each, the paragraphs never match, and consensus
+        # fails on wording rather than on what anyone actually saw.
+        if _is_image(url):
+            self.evidence_digest = "git-commit:" + _commit_of(url)
+
+            def look() -> str:
+                shot = gl.nondet.web.render(url, mode="screenshot")
+                prompt = ("You are a neutral arbitrator deciding whether a delivered image meets an agreement.\n\n"
+                          "THE AGREEMENT:\n" + terms + "\n\n"
+                          "You are looking at the delivered image itself. Judge only what is visibly there. "
+                          "Do not judge taste, quality or effort.\n\n"
+                          "Respond with ONLY this JSON and nothing else. No preamble, no reasoning out loud, no code fence:\n"
+                          '{"verdict": "fulfilled" or "unfulfilled", "reasoning": "at most 12 words naming what you actually see"}')
+                out = gl.nondet.exec_prompt(prompt, images=[shot])
+                return str(out).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
+
+            raw = gl.eq_principle.prompt_comparative(
+                look,
+                "The value of the verdict field has to match exactly. "
+                "The reasoning field only has to describe the same image and reach the same conclusion.",
+            )
+            result, reasoning = _read_verdict(raw)
+            self.is_settled = True
+            if result == "fulfilled":
+                self.verdict = "fulfilled"
+                self.last_reasoning = reasoning or "The jury looked at the delivered image and found it met the agreement."
+                self._release(self.party_b)
+            else:
+                self.verdict = "not_fulfilled"
+                self.last_reasoning = reasoning or "The jury looked at the delivered image and did not find what the agreement asked for."
+                self._release(self.party_a)
+            return self.verdict
+
+        # Step one is deterministic on purpose. Every validator has to come back
+        # with byte identical content before anyone is asked to judge it, and the
+        # hash of exactly what was judged is written on chain so a reader can fetch
+        # the same pinned artifact and confirm they are looking at the same bytes.
+        def grab() -> str:
+            return gl.nondet.web.render(url, mode="text")
+
+        page = gl.eq_principle.strict_eq(grab)
+        digest = hashlib.sha256(page.encode("utf-8")).hexdigest()
+        self.evidence_digest = digest
+
+        if len(page.strip()) < 40:
+            self.is_settled = True
+            self.verdict = "not_fulfilled"
+            self.last_reasoning = ("The pinned artifact came back empty or missing, which happens "
+                                   "when the commit or the path is wrong. There was nothing to "
+                                   "judge, so the escrow returns to the party who funded it.")
+            self._release(self.party_a)
+            return self.verdict
+
+        # Step two is the judgment, and it runs over the content the validators
+        # already agreed on rather than over whatever each of them happened to fetch.
         def judge() -> str:
-            page = gl.nondet.web.render(url, mode="text")
-
-            # An image URL, a login wall or a dead link all render to (almost)
-            # nothing. Decide that here rather than asking the model to reason
-            # about a blank page, where it is free to invent either answer.
-            if len(page.strip()) < 40:
-                return json.dumps({
-                    "verdict": "unfulfilled",
-                    "reasoning": "The evidence page returned no readable text. That happens when the link points at an image file, a page that requires signing in, or a link that no longer resolves. Point it at a public page whose text shows the result.",
-                })
-
             prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
 
 THE AGREEMENT (plain language):
 {terms}
 
-WHAT THE EVIDENCE PAGE ACTUALLY CONTAINS:
+THE EVIDENCE ARTIFACT (fixed at commit {url}, identical for every validator):
 {page}
 
-Decide, based ONLY on what is actually present on the evidence page, whether the agreement's
-requirements were met. Be strict and literal: if the required result is not clearly visible on
-the page, it is not fulfilled. Judge the words of the agreement as written, not what you assume
-was intended.
+Decide, based ONLY on what is actually present in the artifact above, whether the agreement's
+requirements were met. Be strict and literal: if the required result is not clearly present,
+it is not fulfilled. Judge the words of the agreement as written, not what you assume was
+intended.
 
 Respond using ONLY this JSON format, nothing else:
 {{
 "verdict": "fulfilled" or "unfulfilled",
-"reasoning": "two or three sentences naming the specific thing on the page that decided it, or the specific thing that was missing"
+"reasoning": "two or three sentences naming the specific thing in the artifact that decided it, or the specific thing that was missing"
 }}
 Your output must be only JSON, with no prefix, suffix or code fence, and must parse cleanly."""
 
@@ -791,10 +1003,12 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
         self.is_settled = True
         if result == "fulfilled":
             self.verdict = "fulfilled"
-            self.last_reasoning = reasoning or "The jury read the evidence page and found the agreement's requirements were met."
+            self.last_reasoning = reasoning or "The jury read the pinned artifact and found the agreement's requirements were met."
+            self._release(self.party_b)
         else:
             self.verdict = "not_fulfilled"
-            self.last_reasoning = reasoning or "The jury read the evidence page but did not find proof the agreement was met. Check that the evidence URL points to exactly where the result should appear."
+            self.last_reasoning = reasoning or "The jury read the pinned artifact but did not find proof the agreement was met."
+            self._release(self.party_a)
 
         return self.verdict
 
@@ -806,7 +1020,6 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
             "identity_a": self.identity_a,
             "identity_b": self.identity_b,
             "terms": self.terms,
-            "evidence_url": self.evidence_url,
             "deadline": int(self.deadline),
             "signed_a": self.signed_a,
             "signed_b": self.signed_b,
@@ -816,6 +1029,12 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
             "last_reasoning": self.last_reasoning,
             "is_minted": self.is_minted,
             "token_id": self.token_id,
+            "evidence_url": self.evidence_url,
+            "evidence_by": self.evidence_by,
+            "evidence_at": int(self.evidence_at),
+            "evidence_digest": self.evidence_digest,
+            "escrow": str(int(self.escrow)),
+            "paid_to": self.paid_to,
         })`;
 
   let provider=null, account=null, loadedContract=null;
@@ -830,7 +1049,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   function scrollToEl(el){ if(!el)return; var y=el.getBoundingClientRect().top+window.pageYOffset-84; window.scrollTo({top:y,behavior:"smooth"}); }
 
   /* ---- sync helpers: the CONTRACT is the source of truth ---- */
-  function stateKey(s){return JSON.stringify([s.signed_a,s.signed_b,s.is_active,s.is_settled,s.verdict,s.is_minted]);}
+  function stateKey(s){return JSON.stringify([s.signed_a,s.signed_b,s.is_active,s.is_settled,s.verdict,s.is_minted,s.evidence_url,s.evidence_digest,s.escrow,s.paid_to]);}
   function walletRole(s){
     if(!account||!s)return "observer";
     var a=account.toLowerCase();
@@ -913,8 +1132,12 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     el.style.background = kind==="fulfilled" ? "rgba(40,210,130,.08)" : "rgba(255,90,70,.08)";
     el.style.borderColor = kind==="fulfilled" ? "rgba(126,240,176,.3)" : "rgba(255,90,70,.3)";
     el.style.color = kind==="fulfilled" ? "var(--ok)" : "var(--bad)";
-    var extra = kind==="fulfilled" ? "" : " a \u201cnot fulfilled\u201d verdict doesn\u2019t always mean someone failed. it can also mean the evidence link didn\u2019t point to where the result actually shows up, or the page couldn\u2019t be fully read.";
-    el.innerHTML='<b>Why this verdict?</b> '+text+extra;
+    var extra = kind==="fulfilled" ? "" : " a \u201cnot fulfilled\u201d verdict doesn\u2019t always mean someone failed. it can also mean the filed file wasn\u2019t the one that holds the result, or nothing was filed before the deadline closed.";
+    var money = kind==="fulfilled"
+      ? "<br /><b>Where the money went:</b> the escrow is on its way to the counterparty. It lands when this ruling finalizes, which takes a few minutes on the Studio network."
+      : "<br /><b>Where the money went:</b> the escrow returns to the party who funded it. It lands when this ruling finalizes, which takes a few minutes on the Studio network.";
+    var hasMoney = currentStatus && (currentStatus.paid_to || (currentStatus.escrow && currentStatus.escrow!=="0"));
+    el.innerHTML='<b>Why this verdict?</b> '+text+extra+(hasMoney?money:"");
   }
   function clearReasonNote(){ var el=document.getElementById("reasonNote"); if(el)el.remove(); }
   /* The browser's own confirm() box is jarring: it carries the hostname, ignores
@@ -960,11 +1183,14 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     var ok=verdict==="fulfilled", cancelled=verdict==="cancelled";
     var title=cancelled?"Pact cancelled":(ok?"Agreement fulfilled! \uD83C\uDF89":"Ruled: not fulfilled");
     var color=cancelled?"var(--warn)":(ok?"var(--ok)":"var(--bad)");
+    var funded = currentStatus && (currentStatus.paid_to || (currentStatus.escrow && currentStatus.escrow!=="0"));
     var body=cancelled
-      ? "This pact was cancelled before going active. Nothing else to do here."
+      ? ("This pact was cancelled before going active."+(funded?" The escrow goes back to the party who funded it.":" Nothing else to do here."))
       : (ok
-         ? "Both parties signed, then the AI jury read the evidence online and ruled the agreement was kept. The verdict is now recorded on-chain."
-         : "The AI jury read the evidence but didn't find proof the agreement was met. That can also mean the evidence link didn't point to where the result actually shows up.");
+         ? ("Both parties signed, then the AI jury read the pinned evidence and ruled the agreement was kept."+
+            (funded?" The escrow is on its way to the counterparty.":" The verdict is now recorded on-chain."))
+         : ("The AI jury read the pinned evidence but didn't find proof the agreement was met. That can also mean the filed file wasn't the one holding the result, or nothing was filed before the deadline."+
+            (funded?" The escrow goes back to the party who funded it.":"")));
     var w=document.createElement("div"); w.id="resultModal"; w.className="paper-back";
     w.innerHTML='<div style="background:linear-gradient(160deg,#13142e,#0a0b1a);border:1px solid var(--line);border-radius:22px;max-width:440px;width:100%;padding:30px;text-align:center;box-shadow:0 30px 90px rgba(0,0,0,.7);animation:pop .4s cubic-bezier(.34,1.56,.64,1)">'+
       '<img src="'+COOKIE_IMG+'" alt="" style="width:118px;height:118px;object-fit:contain;filter:drop-shadow(0 12px 30px rgba(143,123,255,.4));margin:0 auto" />'+
@@ -1206,22 +1432,28 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     setPv("pv_terms", t, "Your agreement will appear here, word for word, as you write it.");
     setPv("pv_a", account||"", "connect your wallet");
     setPv("pv_b", $("f_partyb").value.trim(), "not set");
-    setPv("pv_evidence", $("f_evidence").value.trim(), "not set");
+    const esc=$("f_escrow").value.trim();
+    setPv("pv_evidence", esc===""?"":(esc==="0"?"none · verdict only":esc+" GEN held by the pact"), "not set");
     const d=$("f_days").value.trim();
-    setPv("pv_deadline", d?(d+" day(s) from signing"):"", "not set");
-    const filled = t && $("f_partyb").value.trim() && $("f_evidence").value.trim() && d;
+    setPv("pv_deadline", d?(d+" "+unitName()+" from signing"):"", "not set");
+    const filled = t && $("f_partyb").value.trim() && esc!=="" && d;
     $("pv_chip").textContent = filled ? "Ready to sign" : "Draft";
   }
-  ["f_terms","f_partyb","f_evidence","f_days","f_ida","f_idb"].forEach(id=>{
+  /* Deadline is stored in seconds so a pact can be an hour long, not only a day.
+     The picker keeps the human unit; the contract only ever sees seconds. */
+  function unitSeconds(){ return parseInt($("f_unit").value,10)||86400; }
+  function unitName(){ const s=unitSeconds(); return s===86400?"day(s)":s===3600?"hour(s)":"minute(s)"; }
+  ["f_terms","f_partyb","f_escrow","f_days","f_ida","f_idb"].forEach(id=>{
     const el=$(id); if(el) el.addEventListener("input",syncPaper);
   });
+  { const u=$("f_unit"); if(u) u.addEventListener("change",syncPaper); }
   syncPaper();
 
   /* ---------------- review & sign (create) ---------------- */
   /* Clears only this form. Never touches a pact already on-chain \u2014 those keep living
      at their own addresses, which is why the confirm text says so explicitly. */
   $("newDraftBtn").addEventListener("click",async()=>{
-    const ids=["f_terms","f_partyb","f_ida","f_idb","f_evidence","f_days"];
+    const ids=["f_terms","f_partyb","f_ida","f_idb","f_escrow","f_days"];
     const filled=ids.filter(id=>(($(id)||{}).value||"").trim()!=="");
     if(!filled.length){ showToast("Nothing to clear","This draft form is already empty."); return; }
     const ok=await askConfirm("Start a new draft?",
@@ -1244,15 +1476,15 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     const partyb=$("f_partyb").value.trim();
     const ida=$("f_ida").value.trim();
     const idb=$("f_idb").value.trim();
-    const evidence=$("f_evidence").value.trim();
+    const escrowStr=$("f_escrow").value.trim();
     const days=$("f_days").value.trim();
     const checks=[
       {el:"f_terms",val:terms,name:"The agreement"},
       {el:"f_partyb",val:partyb,name:"Counterparty address"},
       {el:"f_ida",val:ida,name:"Your identity URL"},
       {el:"f_idb",val:idb,name:"Their identity URL"},
-      {el:"f_evidence",val:evidence,name:"Evidence URL"},
-      {el:"f_days",val:days,name:"Deadline (days)"}
+      {el:"f_escrow",val:escrowStr,name:"Escrow amount"},
+      {el:"f_days",val:days,name:"Deadline"}
     ];
     checks.forEach(c=>$(c.el).style.borderColor="");
     const missing=checks.filter(c=>!c.val);
@@ -1262,7 +1494,20 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       $(missing[0].el).focus(); sFail(); return;
     }
     const d=parseInt(days,10);
-    if(isNaN(d)||d<0){$("f_days").style.borderColor="#ff9d8a";setStatus($("createStatus"),"\u2717 Deadline must be a number (0 or more).");return;}
+    if(isNaN(d)||d<1){$("f_days").style.borderColor="#ff9d8a";setStatus($("createStatus"),"\u2717 The deadline must be at least 1, so the counterparty has a window to file their evidence in.");return;}
+    const escrow=Number(escrowStr);
+    if(isNaN(escrow)||escrow<0){$("f_escrow").style.borderColor="#ff9d8a";setStatus($("createStatus"),"\u2717 Escrow must be a number (0 or more).");return;}
+    /* A zero-value pact is allowed, but it is a different product and saying so
+       once here is kinder than letting someone discover it at settlement. */
+    if(escrow===0){
+      $("f_escrow").style.borderColor="#ffd27a";
+      const ok=await askConfirm("This pact will hold no money",
+        "With an escrow of 0 the jury still reads the evidence and still records a verdict on-chain, "+
+        "but the ruling has nothing to enforce. It is a signed record of what happened, not a settlement.\n\n"+
+        "Put an amount in and the same verdict pays the counterparty or refunds you automatically.",
+        "Keep it verdict only","Add an amount");
+      if(!ok){ $("f_escrow").focus(); $("f_escrow").select(); return; }
+    }
     /* Catch an unedited template before it costs a deploy, a signature and a
        deadline wait. Without this the jury reads a literal "[FILE NAME]", finds
        nothing matching, and correctly rules not fulfilled \u2014 which reads to the
@@ -1277,7 +1522,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       const ok=await askConfirm(
         "Placeholders still in your agreement",
         "Still unfilled:\n\n"+leftover.join("\n")+"\n\n"+
-        "The jury matches your words literally against the evidence page. Left like this it will "+
+        "The jury matches your words literally against the filed evidence. Left like this it will "+
         "look for the bracketed text itself, not find it, and rule NOT FULFILLED.\n\n"+
         "That is fine if you are deliberately demonstrating a rejection. If you meant to describe "+
         "real work, go back and replace each placeholder with the actual file name, number or topic.",
@@ -1291,9 +1536,10 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
         "so this only makes sense when you are testing the flow yourself.",
         "Continue anyway","Go back")) return;
     }
-    pendingDraft={terms,partyb,ida,idb,evidence,days:d};
+    pendingDraft={terms,partyb,ida,idb,escrow,seconds:d*unitSeconds()};
     paperMode="create";
-    openPaper({terms:terms,a:account,b:partyb,evidence:evidence,deadlineDays:d});
+    openPaper({terms:terms,a:account,b:partyb,
+      escrow:escrow,deadlineText:d+" "+unitName()+" from signing"});
   });
 
   /* ---------------- the signing paper ---------------- */
@@ -1301,7 +1547,8 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     $("paperTerms").textContent=info.terms;
     $("paperA").textContent=info.a||"\u2014";
     $("paperB").textContent=info.b||"\u2014";
-    $("paperEvidence").textContent=info.evidence||"\u2014";
+    $("paperEvidence").textContent=(info.escrow===undefined)?(info.escrowText||"\u2014")
+      :(info.escrow>0?(info.escrow+" GEN \u00b7 released by the verdict"):"none \u00b7 verdict only, no money moves");
     $("paperDeadline").textContent=(info.deadlineText!==undefined)?info.deadlineText:(info.deadlineDays+" day(s) from signing");
     $("paperAck").checked=false; $("paperSignBtn").disabled=true; $("paperSig").innerHTML="&nbsp;";
     $("paperModal").classList.remove("hidden");
@@ -1326,7 +1573,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     showTracker("createTx","Waiting for your wallet\u2026","");
     try{
       const client=await freshClient();
-      const txHash=await client.deployContract({code:CONTRACT,args:[dft.partyb,dft.ida,dft.idb,dft.terms,dft.evidence,dft.days]});
+      const txHash=await client.deployContract({code:CONTRACT,args:[dft.partyb,dft.ida,dft.idb,dft.terms,dft.seconds]});
       setStatus($("createStatus"),"Signed and sent. Sealing the pact on-chain\u2026",true);
       showTracker("createTx","Sealing on-chain \u00b7 validators voting\u2026",txHash); showWait();
       const receipt=await client.waitForTransactionReceipt({hash:txHash,status:TransactionStatus.ACCEPTED,retries:240,interval:5000});
@@ -1335,13 +1582,26 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       let addr=r.contractAddress||r.contract_address||d.contractAddress||d.contract_address||d.recipient||d.to_address||r.recipient||r.to_address||null;
       if(!addr){try{const tx=await client.getTransaction({hash:txHash});addr=tx&&(tx.contractAddress||tx.recipient||tx.to_address||(tx.data&&(tx.data.recipient||tx.data.to_address)))||null;}catch(e){}}
       if(addr){
-        setStatus($("createStatus"),"\u2713 Pact created \u2014 you've signed as Party A.\nContract address:\n"+addr+"\n\nNow send this address to Party B so they can open it and sign. The pact only goes live once they sign too.\n"+exLink(txHash));
         sChime();
         $("pv_sa").textContent=short(account||"");
         $("f_contract").value=addr;
+        /* The escrow is a second transaction on purpose. Deployment carries no value,
+           so the money is a separate, visible act that the person confirms knowing the
+           pact address it lands in. If they refuse it, the pact still exists and can be
+           funded later or cancelled \u2014 nothing is stranded. */
+        let funded=true;
+        if(dft.escrow>0){
+          funded=await fundPact(client,addr,dft.escrow,txHash);
+        }
+        if(funded){
+          setStatus($("createStatus"),"\u2713 Pact created \u2014 you've signed as Party A."+
+            (dft.escrow>0?("\n"+dft.escrow+" GEN is now locked in the pact and only the verdict can move it."):"")+
+            "\nContract address:\n"+addr+
+            "\n\nNow send this address to Party B so they can open it and sign. The pact only goes live once they sign too.\n"+exLink(txHash));
+          showToast("You've signed as Party A \u270D","Now Party B needs to open the pact and sign.");
+        }
         setTimeout(()=>{loadStatus();startAuto();},900);
         scrollToEl($("manageCard"));
-        showToast("You've signed as Party A \u270D","Now Party B needs to open the pact and sign.");
       }else{
         setStatus($("createStatus"),"\u2713 Pact created on-chain.\nThe address wasn't returned here, but it exists.\nOpen the explorer, copy the CONTRACT_DEPLOYMENT address, and paste it below.\n"+exLink(txHash));
       }
@@ -1351,6 +1611,31 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       if(m.includes("insufficient")||m.includes("funds"))setStatus($("createStatus"),"\u2717 Not enough test GEN for gas. Click \u201cGet test GEN\u201d next to your wallet address, then try again.");
       else if(m.includes("rejected")||m.includes("4001"))setStatus($("createStatus"),"\u2717 You rejected the transaction in your wallet.");
       else setStatus($("createStatus"),"\u2717 "+m+"\n\n"+tnNote());
+    }
+  }
+
+  /* GEN is an integer number of wei on the wire. Going through micro-GEN first keeps
+     a value like 0.05 exact instead of trusting a float multiplication by 1e18. */
+  function toWei(gen){ return BigInt(Math.round(Number(gen)*1e6))*BigInt("1000000000000"); }
+  function fromWei(wei){ try{ return Number(BigInt(wei)/BigInt("1000000000000"))/1e6; }catch(e){ return 0; } }
+  function fmtGen(wei){ const n=fromWei(wei); return (Math.round(n*1e6)/1e6)+" GEN"; }
+
+  async function fundPact(client,addr,amountGen,deployTx){
+    setStatus($("createStatus"),"Pact created. Now confirm the escrow of "+amountGen+" GEN in your wallet…",true);
+    showTracker("createTx","Waiting for the escrow confirmation…","");
+    try{
+      const h=await client.writeContract({address:addr,functionName:"fund",args:[],value:toWei(amountGen)});
+      showTracker("createTx","Locking "+amountGen+" GEN into the pact…",h); showWait();
+      await client.waitForTransactionReceipt({hash:h,status:TransactionStatus.ACCEPTED,retries:240,interval:5000});
+      hideWait(); clearTracker("createTx");
+      return true;
+    }catch(err){
+      hideWait(); clearTracker("createTx");
+      const m=err&&err.message||String(err);
+      setStatus($("createStatus"),"⚠ The pact was created, but the escrow did not go through.\nContract address:\n"+addr+
+        "\n\nReason: "+m+"\n\nThe pact is live and unfunded. Load it below and press “Add escrow” to try again, "+
+        "or cancel it while it is still unsigned to walk away.\n"+exLink(deployTx),false);
+      return false;
     }
   }
 
@@ -1447,13 +1732,25 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     const prev=currentStatus; currentStatus=s;
     const role=walletRole(s);
     const grid=$("statusGrid");grid.innerHTML="";
+    const escrowWei=s.escrow||"0";
+    const paidOut=s.paid_to&&s.paid_to!=="";
     const rows=[["Agreement",s.terms],["Party A",s.party_a],["Party B",s.party_b],
-      ["A identity",s.identity_a],["B identity",s.identity_b],["Evidence URL",s.evidence_url],
+      ["A identity",s.identity_a],["B identity",s.identity_b],
+      ["Escrow", paidOut
+        ? ("released to "+(sameAddr(s.paid_to,s.party_b)?"Party B":"Party A")+" \u00b7 "+s.paid_to)
+        : (escrowWei==="0" ? "none \u00b7 this pact only records a verdict" : fmtGen(escrowWei)+" held by the pact")],
+      ["Evidence", s.evidence_url || "not filed yet"],
       ["Deadline",fmtDate(s.deadline)],["A signed",s.signed_a?"yes":"no"],["B signed",s.signed_b?"yes":"no"],
       ["Active",s.is_active?"yes":"no"],["Settled",s.is_settled?"yes":"no"],
       ["Verdict",s.verdict||"\u2014"],
       ["Signature token",s.is_minted?(s.token_id||"minted"):"not yet"],
       ["You are",role==="A"?"Party A (creator)":role==="B"?"Party B (counterparty)":"an observer"]];
+    if(s.evidence_by) rows.splice(7,0,["Evidence filed by", s.evidence_by+(s.evidence_at?" \u00b7 "+fmtDate(s.evidence_at):"")]);
+    if(s.evidence_digest){
+      const img=String(s.evidence_digest).indexOf("git-commit:")===0;
+      rows.splice(s.evidence_by?8:7,0,[img?"What the jury looked at (commit)":"What the jury read (sha256)",
+        img?String(s.evidence_digest).slice(11)+" \u00b7 an image, judged by sight; the commit fixes the bytes":s.evidence_digest]);
+    }
     for(const kv of rows){const dt=document.createElement("dt");dt.textContent=kv[0];const dd=document.createElement("dd");dd.textContent=kv[1];grid.appendChild(dt);grid.appendChild(dd);}
 
     const nft=$("nftCard");
@@ -1519,7 +1816,42 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       $("settleBtn").disabled=true;
       $("cancelBtn").disabled=!(role==="A"||role==="B");
     }
+    updateRoleControls(s,role);
   }
+
+  function sameAddr(a,b){ return !!a&&!!b&&String(a).toLowerCase()===String(b).toLowerCase(); }
+
+  /* Who is allowed to do what, decided from chain state rather than from whatever
+     the last screen happened to show. Filing evidence is Party B's alone and only
+     while the deadline is still open, which is exactly what the contract enforces. */
+  function updateRoleControls(s,role){
+    const open=(Date.now()/1000)<Number(s.deadline);
+    const canFile = role==="B" && s.is_active && !s.is_settled && open;
+    $("evidencePanel").classList.toggle("hidden",!canFile);
+    if(canFile && s.evidence_url && !$("f_ev").value.trim()) $("f_ev").value=s.evidence_url;
+    $("fileEvBtn").textContent = s.evidence_url ? "Replace my evidence" : "File this as my evidence";
+
+    const canTopUp = role==="A" && !s.is_settled;
+    $("topUpBtn").classList.toggle("hidden",!canTopUp);
+
+    /* Party B being past the deadline with nothing filed is the one situation that
+       silently costs someone money, so it gets said out loud instead of implied. */
+    if(role==="B" && s.is_active && !s.is_settled && !open && !s.evidence_url){
+      showFileWarn("The deadline has passed and no evidence was ever filed. When this pact is settled it will "+
+        "rule NOT FULFILLED without reading anything, and the escrow goes back to Party A.");
+    } else if(canFile && !s.evidence_url){
+      showFileWarn("You are Party B, so filing the evidence is yours to do. Nothing has been filed yet. "+
+        "If the deadline closes empty, the pact rules NOT FULFILLED and the escrow returns to Party A.");
+    } else clearFileWarn();
+  }
+  function showFileWarn(msg){
+    let el=$("fileWarn");
+    if(!el){ el=document.createElement("div"); el.id="fileWarn"; el.className="tn-note";
+      el.style.cssText="background:rgba(255,190,60,.12);border-color:rgba(255,190,60,.4);margin-top:10px";
+      $("statusGrid").parentNode.insertBefore(el,$("evidencePanel")); }
+    el.innerHTML="<b>⚠ </b>"+msg;
+  }
+  function clearFileWarn(){ const el=$("fileWarn"); if(el) el.remove(); }
 
   function showToast(big,small,ms){
     const t=$("toast");t.innerHTML='<div class="big">'+big+'</div>'+(small?'<div>'+small+'</div>':'');
@@ -1559,12 +1891,105 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     const past=(Date.now()/1000)>=Number(currentStatus.deadline);
     if(!past){ alert("This pact can only be settled after its deadline:\n"+fmtDate(currentStatus.deadline)); return; }
     const ok=await askConfirm("Settle this pact",
-      "This asks the AI jury to read the evidence page and rule whether the agreement was kept.\n\n"+
+      "This asks the AI jury to read the pinned evidence file and rule whether the agreement was kept.\n\n"+
       "Validators each read the page independently and must agree before the verdict is recorded on-chain. "+
       "It usually takes a minute or two.",
       "Ask the jury","Not yet");
     if(ok) runWrite("settle",{ok:"The jury has ruled. See the verdict above."},true);
   });
+  /* ---------------- evidence: pin it, then file it ---------------- */
+  /* Deliberately the same rule the contract applies, written twice. The contract
+     is the one that counts; this copy only exists so a mistake is caught before it
+     costs a transaction, and the wording matches so the two never seem to disagree. */
+  const RAW_PREFIX="https://raw.githubusercontent.com/";
+  function pinError(url){
+    const u=(url||"").trim();
+    if(!u.startsWith(RAW_PREFIX)) return "Evidence has to be a commit-pinned GitHub raw file, starting with "+RAW_PREFIX;
+    const parts=u.slice(RAW_PREFIX.length).split("/");
+    if(parts.length<4) return "The link is missing the owner, the repository, the commit hash or the file path.";
+    if(!/^[0-9a-f]{40}$/i.test(parts[2])) return "The third segment has to be a full 40-character commit hash, not “"+parts[2]+"”. A branch name can be rewritten after signing.";
+    if(parts[3]==="") return "The link carries a commit hash but no file path after it.";
+    return "";
+  }
+
+  /* Turns an ordinary GitHub link into a pinned one by asking GitHub what commit the
+     branch points at right now. Read-only and unauthenticated, so it is rate limited;
+     when it fails the person can still paste a pinned link by hand. */
+  async function pinGithubUrl(url){
+    const u=(url||"").trim();
+    let owner,repo,ref,path;
+    let m=u.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:blob|raw|tree)\/([^/]+)\/(.+)$/);
+    if(m){ owner=m[1];repo=m[2];ref=m[3];path=m[4]; }
+    else{
+      m=u.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/);
+      if(m){ owner=m[1];repo=m[2];ref=m[3];path=m[4]; }
+    }
+    if(!owner) throw new Error("That does not look like a link to a file inside a GitHub repository. It needs the repo and the path to one file, for example https://github.com/owner/repo/blob/main/logo.svg");
+    if(/^[0-9a-f]{40}$/i.test(ref)) return RAW_PREFIX+owner+"/"+repo+"/"+ref.toLowerCase()+"/"+path;
+    const r=await fetch("https://api.github.com/repos/"+owner+"/"+repo+"/commits/"+encodeURIComponent(ref));
+    if(!r.ok) throw new Error("GitHub answered "+r.status+" when asked what commit “"+ref+"” points at. Check the repo is public and the branch name is right.");
+    const j=await r.json();
+    if(!j||!j.sha) throw new Error("GitHub did not return a commit for “"+ref+"”.");
+    return RAW_PREFIX+owner+"/"+repo+"/"+String(j.sha).toLowerCase()+"/"+path;
+  }
+
+  $("pinBtn").addEventListener("click",async()=>{
+    const el=$("f_ev"), v=el.value.trim();
+    if(!v){ el.focus(); setStatus($("actionStatus"),"✗ Paste a GitHub file link first."); return; }
+    setStatus($("actionStatus"),"Asking GitHub which commit that link points at…",true);
+    try{
+      const pinned=await pinGithubUrl(v);
+      el.value=pinned; el.style.borderColor="";
+      /* Setting .value in code does not fire input, so the live pinned/not-pinned
+         note under the field would keep showing the old warning. Fire it by hand. */
+      el.dispatchEvent(new Event("input",{bubbles:true}));
+      setStatus($("actionStatus"),"✓ Pinned. This link now names an exact commit, so its contents can never change:\n"+pinned);
+      showToast("Pinned to a commit 📌","Check it opens the file you mean, then file it as your evidence.");
+    }catch(err){
+      el.style.borderColor="#ff9d8a";
+      setStatus($("actionStatus"),"✗ "+(err&&err.message||String(err)));
+    }
+  });
+
+  $("fileEvBtn").addEventListener("click",async()=>{
+    if(needWallet())return;
+    if(!currentStatus){alert("Load a pact first.");return;}
+    const el=$("f_ev"), v=el.value.trim();
+    const bad=pinError(v);
+    if(bad){
+      el.style.borderColor="#ff9d8a";
+      setStatus($("actionStatus"),"✗ "+bad+"\n\nPress “Pin it for me” and this is done for you.");
+      sFail(); return;
+    }
+    el.style.borderColor="";
+    const replacing=!!currentStatus.evidence_url;
+    const ok=await askConfirm(replacing?"Replace your evidence":"File this as your evidence",
+      (replacing?"This replaces what you filed earlier. ":"")+
+      "You are naming this exact file, at this exact commit, as the proof that you kept the agreement:\n\n"+v+"\n\n"+
+      "It is signed with your wallet and recorded on-chain. You can still change it until the deadline; after that it is locked "+
+      "and the jury reads it as it stands.",
+      replacing?"Replace it":"File it","Not yet");
+    if(!ok) return;
+    runWrite("submit_evidence",{ok:replacing?"Evidence replaced.":"Evidence filed. The other party can see it now."},false,[v]);
+  });
+
+  $("topUpBtn").addEventListener("click",async()=>{
+    if(needWallet())return;
+    if(!currentStatus){alert("Load a pact first.");return;}
+    const held=fromWei(currentStatus.escrow||"0");
+    const raw=prompt("How much GEN do you want to add to this pact?\n\nCurrently held: "+held+" GEN","1");
+    if(raw===null) return;
+    const amt=Number(String(raw).trim());
+    if(isNaN(amt)||amt<=0){ setStatus($("actionStatus"),"✗ Enter an amount greater than zero."); return; }
+    const ok=await askConfirm("Add "+amt+" GEN to this pact",
+      "This moves "+amt+" GEN out of your wallet and into the pact, where only the verdict can release it: "+
+      "to the counterparty if the jury rules FULFILLED, back to you if it rules NOT FULFILLED or nothing is filed.\n\n"+
+      "The pact would then hold "+(Math.round((held+amt)*1e6)/1e6)+" GEN.",
+      "Add the escrow","Not now");
+    if(!ok) return;
+    runWrite("fund",{ok:amt+" GEN added to the escrow."},false,[],toWei(amt));
+  });
+
   $("cancelBtn").addEventListener("click",async()=>{
     if(!currentStatus){alert("Load a pact first.");return;}
     const ok=await askConfirm("Cancel this pact",
@@ -1574,7 +1999,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     if(ok) runWrite("cancel",{ok:"Pact cancelled."},false);
   });
 
-  async function runWrite(fnName,labels,isSettle){
+  async function runWrite(fnName,labels,isSettle,args,value){
     if(needWallet())return;
     if(!loadedContract){alert("Load a pact first.");return;}
     const before = currentStatus ? stateKey(currentStatus) : null;
@@ -1585,7 +2010,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     let txHash=null;
     try{
       const client=await freshClient();
-      txHash=await client.writeContract({address:addr,functionName:fnName,args:[],value:0});
+      txHash=await client.writeContract({address:addr,functionName:fnName,args:args||[],value:(value!==undefined?value:0)});
       trackProvisional(fnName,txHash);
       watchFinalization(txHash,fnName,addr);
       showTracker("actionTx",(isSettle?"Jury deliberating \u00b7 reading the evidence\u2026":"Validators voting on your transaction\u2026"),txHash);
@@ -1643,26 +2068,22 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
      users pasted them unedited against their own repo, the jury correctly ruled
      not fulfilled, and it read like a broken jury. Brackets make the edit obvious,
      and if one is missed the pre-flight check below catches it before deploy. */
+  /* Every example describes what has to be INSIDE one file, because that is what the
+     jury now reads: a single artifact, pinned to a commit, byte for byte. Terms that
+     talk about a folder or a repository page no longer match how evidence is filed. */
   const TERMS_IDEAS=[
-    ["Freelance \u2014 design delivery (any format)","By the deadline, the linked page shows that the agreed design file has been delivered, in any common image format such as .jpg, .png or .svg. Fulfilled if such a file is visible on the page. NOTE: the jury reads text, so it can confirm the file is there but cannot see whether the artwork itself is what you wanted."],
-    ["Freelance \u2014 design delivery (exact file)","By the deadline, the linked repository contains a file named [FILE NAME, e.g. logo.svg]. Fulfilled only if that exact file name is visible on the linked page. NOTE: naming a format makes this strict \u2014 logo.jpg will not satisfy a term that asks for logo.svg."],
-    ["Freelance \u2014 website build","By the deadline, the linked repository contains a README that lists, in text, these sections: [SECTION NAMES, e.g. Home, Pricing, Contact]. Fulfilled only if every one of those section names appears."],
-    ["Freelance \u2014 article writing","By the deadline, the linked page shows a published article of at least [WORD COUNT, e.g. 500] words about [TOPIC], containing a title and at least [NUMBER, e.g. 3] subheadings. Fulfilled only if the full text is visible on the page."],
-    ["Content \u2014 publish a post","By the deadline, the linked page shows a published post about [TOPIC] that mentions [WHAT MUST BE NAMED] at least [NUMBER, e.g. 3] times. Fulfilled only if that text is present."],
-    ["Open source \u2014 ship a feature","By the deadline, the linked repository page shows a release or changelog entry naming [FEATURE NAME], with a version number above [CURRENT VERSION]. Fulfilled only if both are visible in the page text."],
-    ["Open source \u2014 fix bugs","By the deadline, the linked issues page shows issues [ISSUE NUMBERS, e.g. #12, #14] with the status Closed. Fulfilled only if every one of those numbers is listed as closed."],
-    ["Docs \u2014 write a guide","By the deadline, the linked page shows a setup guide for [WHAT IT SETS UP] with numbered steps, a prerequisites list, and at least one code block. Fulfilled only if all three are visible in the text."],
-    ["Milestone \u2014 finish a course","By the deadline, the linked page shows a completion record naming the course [COURSE NAME] and the name [LEARNER NAME]. Fulfilled only if both appear on the page."],
-    ["Challenge \u2014 ship daily","By the deadline, the linked page lists a dated entry for every day from [START DATE] to [END DATE], with no gaps. Fulfilled only if every date in that range is present."],
-    ["Bet \u2014 public prediction","At the deadline, the linked public source states the outcome of [EVENT]. Fulfilled only if that source states [PREDICTED OUTCOME] happened."]
-  ];
-  const EVIDENCE_IDEAS=[
-    ["GitHub repo","https://github.com/owner/repo"],
-    ["GitHub profile","https://github.com/username"],
-    ["X / Twitter profile","https://x.com/username"],
-    ["Blog post / website","https://yourblog.com/post"],
-    ["YouTube channel","https://youtube.com/@channel"],
-    ["Medium profile","https://medium.com/@username"]
+    ["Design \u2014 logo delivery","By the deadline, the counterparty files the logo image itself. Fulfilled only if the image is a graphic mark or wordmark on a plain background, and not a photograph or a portrait of a person. NOTE: the jury renders the image and looks at it, but it judges what is visibly there, never whether the design is good."],
+    ["Design \u2014 the right wordmark","By the deadline, the counterparty files the logo image itself. Fulfilled only if the text visible in the image reads exactly [BRAND NAME]."],
+    ["Design \u2014 shape and colour","By the deadline, the counterparty files the design image itself. Fulfilled only if the image shows [SHAPE, e.g. a circular mark] in [COLOUR, e.g. blue]."],
+    ["Freelance \u2014 article writing","By the deadline, the counterparty files a text file containing a finished article about [TOPIC] of at least [WORD COUNT, e.g. 500] words, with a title line and at least [NUMBER, e.g. 3] subheadings. Fulfilled only if all of that is present in the file itself."],
+    ["Freelance \u2014 website copy","By the deadline, the counterparty files a single file containing the finished copy for these sections: [SECTION NAMES, e.g. Home, Pricing, Contact]. Fulfilled only if every one of those section headings appears in the file, each with at least one paragraph under it."],
+    ["Code \u2014 ship a function","By the deadline, the counterparty files a source file that defines [FUNCTION OR CLASS NAME] and handles [WHAT IT MUST HANDLE]. Fulfilled only if that definition is present in the file."],
+    ["Code \u2014 write the tests","By the deadline, the counterparty files a test file containing at least [NUMBER, e.g. 5] separate test cases covering [WHAT IS BEING TESTED]. Fulfilled only if that many distinct tests are visible in the file."],
+    ["Docs \u2014 write a guide","By the deadline, the counterparty files a document that is a setup guide for [WHAT IT SETS UP], containing numbered steps, a prerequisites list, and at least one code block. Fulfilled only if all three are present."],
+    ["Docs \u2014 changelog entry","By the deadline, the counterparty files a changelog that names [FEATURE NAME] under a version above [CURRENT VERSION]. Fulfilled only if both the feature name and such a version appear."],
+    ["Data \u2014 deliver a dataset","By the deadline, the counterparty files a data file with a header row containing the columns [COLUMN NAMES] and at least [NUMBER, e.g. 100] rows of data. Fulfilled only if the header matches and the rows are there."],
+    ["Translation \u2014 deliver a translation","By the deadline, the counterparty files the full [TARGET LANGUAGE] translation of [WHAT IS BEING TRANSLATED], covering every section of the original. Fulfilled only if no section is missing."],
+    ["Research \u2014 write a summary","By the deadline, the counterparty files a summary of [SUBJECT] that names at least [NUMBER, e.g. 3] distinct sources and states a conclusion. Fulfilled only if the sources and the conclusion are both in the file."]
   ];
   function wireSuggest(btnId,listId,ideas,targetId,onPick){
     const list=$(listId), btn=$(btnId), labelClosed=btn.textContent;
@@ -1687,31 +2108,28 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     el.focus(); el.select();
     showToast("Now make it yours","This is a worked example. Replace the specific file names, numbers or sections with your actual deliverable \u2014 the jury checks these exact words.");
   });
-  wireSuggest("evidenceSuggestBtn","evidenceSuggestList",EVIDENCE_IDEAS,"f_evidence",(el)=>{ el.focus(); });
 
-  /* ---- live check: warn if the evidence URL is a page the jury can't read ---- */
-  (function evidenceGuard(){
-    const el=$("f_evidence"); if(!el)return;
-    const BLOCKED=[["x.com","X/Twitter"],["twitter.com","X/Twitter"],["instagram.com","Instagram"],
-      ["linkedin.com","LinkedIn"],["discord.com","Discord"],["discord.gg","Discord"],
-      ["facebook.com","Facebook"],["tiktok.com","TikTok"],["t.me","Telegram"]];
-    let warn=null;
+  /* ---- live check on the evidence field: is this link actually pinned? ---- */
+  (function pinGuard(){
+    const el=$("f_ev"); if(!el)return;
+    let note=null;
+    const show=(html,bad)=>{
+      if(!note){ note=document.createElement("div"); note.className="tn-note";
+        note.style.marginTop="8px"; el.parentNode.insertBefore(note, el.nextSibling); }
+      note.style.background = bad?"rgba(255,90,70,.1)":"rgba(60,200,140,.1)";
+      note.style.borderColor = bad?"rgba(255,90,70,.35)":"rgba(60,200,140,.35)";
+      note.innerHTML=html;
+      el.style.borderColor = bad?"rgba(255,90,70,.6)":"";
+    };
     el.addEventListener("input",()=>{
-      const v=el.value.toLowerCase();
-      const hit=BLOCKED.find(p=>v.includes(p[0]));
-      if(hit){
-        if(!warn){ warn=document.createElement("div"); warn.className="tn-note";
-          warn.style.cssText="background:rgba(255,90,70,.1);border-color:rgba(255,90,70,.35);color:var(--bad);margin-top:8px";
-          el.parentNode.insertBefore(warn, el.nextSibling); }
-        warn.innerHTML="<b>\u26A0 "+hit[1]+" blocks automated reading.</b> The AI jury won't be able to see this page, so it would rule <b>not fulfilled</b> no matter what's on it. Use a public page instead, like a GitHub file or a blog post.";
-        el.style.borderColor="rgba(255,90,70,.6)";
-      }else{
-        if(warn){ warn.remove(); warn=null; }
-        el.style.borderColor="";
-      }
+      const v=el.value.trim();
+      if(!v){ if(note){note.remove();note=null;} el.style.borderColor=""; return; }
+      const bad=pinError(v);
+      if(bad) show("<b>\u26A0 Not pinned yet.</b> "+bad+" Press <b>Pin it for me</b> and this is handled for you.",true);
+      else show("<b>\u2713 Pinned.</b> This names one exact commit, so the bytes the jury reads are fixed and anyone can re-check them against the hash recorded on-chain.",false);
     });
   })();
-  ["f_terms","f_partyb","f_ida","f_idb","f_evidence","f_days"].forEach(id=>{
+  ["f_terms","f_partyb","f_ida","f_idb","f_escrow","f_days"].forEach(id=>{
     const el=$(id); if(el)el.addEventListener("input",()=>{el.style.borderColor="";});
   });
 
