@@ -1826,17 +1826,21 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
      while the deadline is still open, which is exactly what the contract enforces. */
   function updateRoleControls(s,role){
     const open=(Date.now()/1000)<Number(s.deadline);
-    const canFile = role==="B" && s.is_active && !s.is_settled && open;
+    /* Pacts deployed before escrow and filed evidence existed have neither method.
+       Their get_status simply has no escrow key, which is the cleanest version tell
+       there is: offer them nothing that would revert. */
+    const modern = s.escrow!==undefined;
+    const canFile = modern && role==="B" && s.is_active && !s.is_settled && open;
     $("evidencePanel").classList.toggle("hidden",!canFile);
     if(canFile && s.evidence_url && !$("f_ev").value.trim()) $("f_ev").value=s.evidence_url;
     $("fileEvBtn").textContent = s.evidence_url ? "Replace my evidence" : "File this as my evidence";
 
-    const canTopUp = role==="A" && !s.is_settled;
+    const canTopUp = modern && role==="A" && !s.is_settled;
     $("topUpBtn").classList.toggle("hidden",!canTopUp);
 
     /* Party B being past the deadline with nothing filed is the one situation that
        silently costs someone money, so it gets said out loud instead of implied. */
-    if(role==="B" && s.is_active && !s.is_settled && !open && !s.evidence_url){
+    if(modern && role==="B" && s.is_active && !s.is_settled && !open && !s.evidence_url){
       showFileWarn("The deadline has passed and no evidence was ever filed. When this pact is settled it will "+
         "rule NOT FULFILLED without reading anything, and the escrow goes back to Party A.");
     } else if(canFile && !s.evidence_url){
