@@ -1372,13 +1372,17 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     const b=$("faucetBtn"), old=b.innerHTML;
     b.disabled=true; b.innerHTML='<span class="spinner"></span>Funding\u2026';
     try{
+      /* sim_fundAccount counts in wei, not GEN. Sending 100 here funds a hundred
+         wei, which is invisible: it was enough while every transaction carried no
+         value, and only surfaced once escrow made the balance matter, as a wallet
+         refusing to sign for insufficient gas. */
       const res=await fetch(RPC_URL,{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({jsonrpc:"2.0",id:Date.now(),method:"sim_fundAccount",
-          params:{account_address:account,amount:100}})});
+          params:{account_address:account,amount:100*1e18}})});
       const j=await res.json();
       if(j.error)throw new Error(j.error.message||"the faucet refused the request");
       sChime();
-      showToast("\uD83D\uDCA7 Test GEN sent","Your wallet was funded on the Studio network. It may take a few seconds to show up.");
+      showToast("\uD83D\uDCA7 100 test GEN sent","Your wallet was funded on the Studio network. It may take a few seconds to show up \u2014 press again if you need more.");
     }catch(e){
       showToast("Faucet failed",(e&&e.message)||String(e));
     }finally{ b.disabled=false; b.innerHTML=old; }
