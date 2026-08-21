@@ -545,7 +545,7 @@
 
       <div class="btn-row">
         <button class="btn-primary hidden" id="signBtn">Review &amp; sign this pact ✎</button>
-        <button class="btn-ghost hidden" id="topUpBtn">Add escrow 💰</button>
+        <button class="btn-ghost hidden" id="topUpBtn">Add more escrow (optional) 💰</button>
         <button class="btn-ghost" id="settleBtn" disabled>Settle (ask the AI jury) ⚖</button>
         <button class="btn-danger" id="cancelBtn" disabled>Cancel pact</button>
       </div>
@@ -1501,6 +1501,22 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     if(isNaN(d)||d<1){$("f_days").style.borderColor="#ff9d8a";setStatus($("createStatus"),"\u2717 The deadline must be at least 1, so the counterparty has a window to file their evidence in.");return;}
     const escrow=Number(escrowStr);
     if(isNaN(escrow)||escrow<0){$("f_escrow").style.borderColor="#ff9d8a";setStatus($("createStatus"),"\u2717 Escrow must be a number (0 or more).");return;}
+    /* The deadline is not just when the jury rules, it is the whole window the other
+       side has to sign AND file their proof in. Two consensus transactions on Studio
+       is a few minutes on a good run, so a very short pact quietly sets them up to
+       miss it and hands the escrow straight back. */
+    const secs=d*unitSeconds();
+    if(secs<1800){
+      $("f_days").style.borderColor="#ffd27a";
+      const okShort=await askConfirm("That window is very short",
+        "The deadline is not only when the jury rules. It is the whole time Party B has to open the pact, "+
+        "sign it, and file their evidence, and each of those is a transaction that takes a minute or two "+
+        "to reach consensus.\n\n"+
+        "With "+d+" "+unitName()+" they have to be at their keyboard and ready. If they miss it, the pact rules "+
+        "NOT FULFILLED without reading anything and your escrow comes back — which costs nothing but the round.",
+        "I know, keep it short","Give them longer");
+      if(!okShort){ $("f_days").focus(); $("f_days").select(); return; }
+    }
     /* A zero-value pact is allowed, but it is a different product and saying so
        once here is kinder than letting someone discover it at settlement. */
     if(escrow===0){
@@ -1842,6 +1858,22 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     const canTopUp = modern && role==="A" && !s.is_settled;
     $("topUpBtn").classList.toggle("hidden",!canTopUp);
 
+    /* The single most asked question from Party A is "where do I put the evidence".
+       They never do: that is the whole point of the counterparty filing it. Say so
+       inside the pact rather than leaving them to infer it from a missing panel. */
+    if(modern && role==="A" && !s.is_settled){
+      const left=Math.round((Number(s.deadline)-Date.now()/1000)/60);
+      showNextSteps(
+        (!s.signed_b
+          ? "<b>Next:</b> send this pact's address to Party B. Nothing else moves until they sign."
+          : (!s.evidence_url
+              ? "<b>Next:</b> Party B has signed. They now file the evidence themselves, before the deadline."
+              : "<b>Next:</b> Party B has filed their evidence. Check it above, then settle after the deadline."))
+        + " <b>You never file the evidence</b> \u2014 the side that owes the work names the proof, which is what stops the terms and the proof coming from the same hand."
+        + (left>0 && left<30 ? " <b style='color:var(--warn)'>Only about "+left+" minutes left in the window.</b>" : "")
+        + (Number(s.escrow||0)>0 ? " The escrow already covers this pact; adding more is optional." : ""));
+    } else clearNextSteps();
+
     /* Party B being past the deadline with nothing filed is the one situation that
        silently costs someone money, so it gets said out loud instead of implied. */
     if(modern && role==="B" && s.is_active && !s.is_settled && !open && !s.evidence_url){
@@ -1852,6 +1884,14 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
         "If the deadline closes empty, the pact rules NOT FULFILLED and the escrow returns to Party A.");
     } else clearFileWarn();
   }
+  function showNextSteps(html){
+    let el=$("nextSteps");
+    if(!el){ el=document.createElement("div"); el.id="nextSteps"; el.className="tn-note";
+      el.style.cssText="background:rgba(111,60,255,.1);border-color:rgba(143,123,255,.35);margin-top:10px";
+      $("statusGrid").parentNode.insertBefore(el,$("evidencePanel")); }
+    el.innerHTML=html;
+  }
+  function clearNextSteps(){ const el=$("nextSteps"); if(el) el.remove(); }
   function showFileWarn(msg){
     let el=$("fileWarn");
     if(!el){ el=document.createElement("div"); el.id="fileWarn"; el.className="tn-note";
