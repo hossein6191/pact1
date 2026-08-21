@@ -1128,6 +1128,8 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     if(fn==="settle" && s && s.verdict==="fulfilled"){ burstConfetti(); sWin(); showFinalizeSticker("fulfilled"); showToast("\u2705 Verdict finalized on-chain","FULFILLED is now fully confirmed."); }
     else if(fn==="settle" && s && s.verdict==="not_fulfilled"){ showFinalizeSticker("not_fulfilled"); showToast("\u2705 Verdict finalized","NOT FULFILLED is now fully confirmed."); }
     else if(fn==="sign"){ burstConfetti(); showFinalizeSticker("sign"); showToast("\u2705 Signatures finalized","The pact is fully confirmed on-chain."); }
+    else if(fn==="submit_evidence"){ showToast("\u2705 Evidence finalized","Your filing is fully confirmed on-chain."); }
+    else if(fn==="fund"){ showToast("\u2705 Escrow finalized","The GEN is locked in the pact and only the verdict can move it."); }
   }
   function showFinalizeSticker(kind){
     var w=document.createElement("div");
@@ -1156,6 +1158,55 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
      the site's design, and on some setups steals focus in ways that look broken.
      This is the same decision, asked inside the page. Resolves true/false so it
      drops into the places confirm() used to sit. */
+  /* One-button sibling of askConfirm. The browser's alert() carries the hostname,
+     ignores the site's design and blocks the tab; this does none of that. */
+  function tell(title, body, okLabel){
+    return new Promise(function(resolve){
+      var back=document.createElement("div");
+      back.className="paper-back";
+      back.innerHTML='<div class="modal-box" role="dialog" aria-modal="true">'+
+        '<h3>'+title+'</h3>'+
+        '<div style="color:var(--muted);font-size:14px;line-height:1.7;white-space:pre-wrap;margin-bottom:20px">'+body+'</div>'+
+        '<button class="gotit" style="width:100%" data-a="ok">'+(okLabel||"OK")+'</button></div>';
+      function done(){ if(back.parentNode) back.remove(); document.removeEventListener("keydown",onKey); resolve(true); }
+      function onKey(e){ if(e.key==="Escape"||e.key==="Enter") done(); }
+      back.addEventListener("click",function(e){
+        var el=e.target && e.target.closest ? e.target.closest("[data-a]") : null;
+        if((el && el.getAttribute("data-a")==="ok") || e.target===back) done();
+      });
+      document.addEventListener("keydown",onKey);
+      document.body.appendChild(back);
+      var b=back.querySelector('[data-a="ok"]'); if(b) b.focus();
+    });
+  }
+  /* Text-entry sibling of askConfirm. Resolves to the trimmed string, or null. */
+  function askInput(title, body, placeholder, defaultVal, okLabel, cancelLabel){
+    return new Promise(function(resolve){
+      var back=document.createElement("div");
+      back.className="paper-back";
+      back.innerHTML='<div class="modal-box" role="dialog" aria-modal="true">'+
+        '<h3>'+title+'</h3>'+
+        '<div style="color:var(--muted);font-size:14px;line-height:1.7;white-space:pre-wrap;margin-bottom:14px">'+body+'</div>'+
+        '<input type="text" inputmode="decimal" data-a="field" placeholder="'+(placeholder||"")+'" value="'+(defaultVal||"")+'" style="width:100%;margin-bottom:16px" />'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
+          '<button class="gotit" style="flex:1;min-width:150px" data-a="ok">'+(okLabel||"Continue")+'</button>'+
+          '<button class="btn-ghost" style="flex:1;min-width:120px" data-a="cancel">'+(cancelLabel||"Cancel")+'</button>'+
+        '</div></div>';
+      var field=back.querySelector('[data-a="field"]');
+      function done(v){ if(back.parentNode) back.remove(); document.removeEventListener("keydown",onKey); resolve(v); }
+      function onKey(e){ if(e.key==="Escape") done(null); else if(e.key==="Enter" && document.activeElement===field) done(field.value.trim()); }
+      back.addEventListener("click",function(e){
+        var el=e.target && e.target.closest ? e.target.closest("[data-a]") : null;
+        var a=el && el.getAttribute("data-a");
+        if(a==="ok") done(field.value.trim());
+        else if(a==="cancel") done(null);
+        else if(e.target===back) done(null);
+      });
+      document.addEventListener("keydown",onKey);
+      document.body.appendChild(back);
+      field.focus(); field.select();
+    });
+  }
   function askConfirm(title, body, okLabel, cancelLabel){
     return new Promise(function(resolve){
       var back=document.createElement("div");
@@ -1247,6 +1298,12 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     else if(m.includes("already settled"))setStatus(el,"This pact is already settled \u2014 nothing more to do.");
     else if(m.includes("cannot be cancelled"))setStatus(el,"This pact is already active and can't be cancelled.");
     else if(m.includes("Only a party"))setStatus(el,"\u2717 Only a party to this pact can cancel it.");
+    else if(m.includes("Only the obligated party"))setStatus(el,"\u2717 Only Party B, the side that owes the work, can file evidence. If you are Party A, this is theirs to do.");
+    else if(m.includes("evidence is closed"))setStatus(el,"\u2717 The deadline has passed, so evidence can no longer be filed or changed. Settling now rules NOT FULFILLED and returns the escrow.");
+    else if(m.includes("before evidence can be filed"))setStatus(el,"\u2717 Both parties have to sign before evidence can be filed.");
+    else if(m.includes("commit pinned")||m.includes("commit hash")||m.includes("file path"))setStatus(el,"\u2717 "+m.replace(/^.*?(Evidence has to be|The link|The third segment)/,"$1")+"\n\nPress \u201cPin it for me\u201d and the link is converted for you.");
+    else if(m.includes("Only the party who drafted"))setStatus(el,"\u2717 Only Party A, who created this pact, can add to its escrow.");
+    else if(m.includes("greater than zero"))setStatus(el,"\u2717 The amount has to be more than zero.");
     else if(m.includes("insufficient")||m.includes("funds"))setStatus(el,"\u2717 Not enough test GEN for gas. Click \u201cGet test GEN\u201d next to your wallet address, then try again.");
     else if(m.includes("rejected")||m.includes("4001"))setStatus(el,"\u2717 You rejected the transaction in your wallet. Nothing happened.");
     else setStatus(el,"\u2717 "+m+"\n\n"+tnNote());
@@ -1353,7 +1410,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     }
   }
   async function connectWith(p){
-    if(!p){alert("Wallet not available.");return;}
+    if(!p){tell("Wallet not available","That wallet did not answer. Make sure its extension is unlocked, then try again.");return;}
     provider=p;
     try{
       await ensureNetwork(p);
@@ -1366,7 +1423,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       $("connectBtn").textContent="Wallet connected";$("connectBtn").disabled=true;
       sChime(); syncPaper();
       p.on&&p.on("accountsChanged",(a)=>{if(a&&a.length){account=getAddress(a[0]);$("acctText").textContent=short(account);syncPaper();}else{doDisconnect();}});
-    }catch(err){alert("Connection failed: "+(err&&err.message||err));}
+    }catch(err){tell("Connection failed",String(err&&err.message||err));}
   }
   function doDisconnect(){
     provider=null;account=null;loadedContract=null;stopAuto();
@@ -1747,7 +1804,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
 
   async function loadStatus(silent){
     const addr=$("f_contract").value.trim();
-    if(!addr){ if(!silent)alert("Paste a contract address first."); return; }
+    if(!addr){ if(!silent)showToast("Paste a pact address first","It is the 0x\u2026 address you got when the pact was created."); return; }
     loadedContract=addr;
     $("statusPanel").classList.remove("hidden");
     if(!silent) setStatus($("actionStatus"),"Reading pact from the chain\u2026",true);
@@ -1884,6 +1941,11 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
         + " <b>You never file the evidence</b> \u2014 the side that owes the work names the proof, which is what stops the terms and the proof coming from the same hand."
         + (left>0 && left<30 ? " <b style='color:var(--warn)'>Only about "+left+" minutes left in the window.</b>" : "")
         + (Number(s.escrow||0)>0 ? " The escrow already covers this pact; adding more is optional." : ""));
+    } else if(modern && role==="B" && s.is_active && !s.is_settled && s.evidence_url){
+      const open2=(Date.now()/1000)<Number(s.deadline);
+      showNextSteps(open2
+        ? "<b>Filed.</b> Your evidence is on-chain and Party A can see it. You can still replace it until the deadline; after that it is locked and the jury reads it as it stands. Once the deadline passes, either of you settles."
+        : "<b>Locked.</b> The deadline has passed, so your evidence can no longer change. Either party can now settle and the jury will rule on it.");
     } else clearNextSteps();
 
     /* Party B being past the deadline with nothing filed is the one situation that
@@ -1921,21 +1983,29 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   /* ---------------- sign existing (B) ---------------- */
   $("signBtn").addEventListener("click",()=>{
     if(needWallet())return;
-    if(!currentStatus){alert("Load a pact first.");return;}
+    if(!currentStatus){showToast("Load a pact first","Paste the pact address above and press Load pact.");return;}
     const role=walletRole(currentStatus);
-    if(currentStatus.signed_b){ alert("Party B has already signed this pact \u2014 it's now active or settled. You don't need to sign again."); return; }
-    if(role!=="B"){ alert("Only the counterparty (Party B) can sign this pact.\n\nThis pact's Party B is:\n"+currentStatus.party_b+"\n\nSwitch to that wallet in Rabby, reconnect, then load the pact again."); return; }
+    if(currentStatus.signed_b){ tell("Already signed","Party B has already signed this pact \u2014 it's now active or settled. You don't need to sign again."); return; }
+    if(role!=="B"){ tell("Only Party B can sign","Only the counterparty (Party B) can sign this pact.\n\nThis pact's Party B is:\n"+currentStatus.party_b+"\n\nSwitch to that wallet, reconnect, then load the pact again."); return; }
     paperMode="sign";
+    /* B is about to bind themselves to this. The escrow they are signing for has to
+       be on the sheet, not discovered afterwards in the status grid. */
+    const heldWei=currentStatus.escrow;
+    const escrowText = heldWei===undefined ? "\u2014 (older pact, no escrow)"
+      : (heldWei==="0" ? "none \u00b7 verdict only, no money moves"
+         : fmtGen(heldWei)+" \u00b7 paid to you if FULFILLED, refunded to Party A if not");
     openPaper({terms:currentStatus.terms,a:currentStatus.party_a,b:currentStatus.party_b,
-      evidence:currentStatus.evidence_url,deadlineText:fmtDate(currentStatus.deadline)});
+      escrowText:escrowText,deadlineText:fmtDate(currentStatus.deadline)});
   });
   async function doSign(){
     closePaper();
-    await runWrite("sign",{ok:"You've signed. Once the network confirms, the pact becomes active and the signature token is minted."},false);
+    const modern = currentStatus && currentStatus.escrow!==undefined;
+    await runWrite("sign",{ok:"You've signed. Once the network confirms, the pact becomes active and the signature token is minted."+
+      (modern?"\n\nNext, and before the deadline: file your evidence below \u2014 one commit-pinned GitHub file that shows you kept the agreement. Until you do, the pact has nothing to judge.":"")},false);
   }
 
   /* ---------------- settle (with judge overlay) ---------------- */
-  const JUDGE_LINES=["The AI jury is reading the evidence\u2026","Validators are weighing the facts\u2026","Cross-examining the webpage\u2026","Deliberating on the verdict\u2026","Almost ready to rule\u2026"];
+  const JUDGE_LINES=["The AI jury is reading the evidence\u2026","Validators are weighing the facts\u2026","Cross-examining the pinned file\u2026","Deliberating on the verdict\u2026","Almost ready to rule\u2026"];
   let judgeTimer=null;
   function showJudge(){
     $("judgeOverlay").classList.remove("hidden");
@@ -1946,15 +2016,27 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   function hideJudge(){ if(judgeTimer)clearInterval(judgeTimer); $("judgeOverlay").classList.add("hidden"); $("judgeOverlay").style.display=""; }
 
   $("settleBtn").addEventListener("click",async()=>{
-    if(!currentStatus){alert("Load a pact first.");return;}
-    if(!currentStatus.is_active){ alert("This pact isn't active yet. Both parties must sign before it can be settled."); return; }
+    if(!currentStatus){showToast("Load a pact first","Paste the pact address above and press Load pact.");return;}
+    if(!currentStatus.is_active){ tell("Not active yet","Both parties must sign before this pact can be settled."); return; }
     const past=(Date.now()/1000)>=Number(currentStatus.deadline);
-    if(!past){ alert("This pact can only be settled after its deadline:\n"+fmtDate(currentStatus.deadline)); return; }
-    const ok=await askConfirm("Settle this pact",
-      "This asks the AI jury to read the pinned evidence file and rule whether the agreement was kept.\n\n"+
-      "Validators each read the page independently and must agree before the verdict is recorded on-chain. "+
-      "It usually takes a minute or two.",
-      "Ask the jury","Not yet");
+    if(!past){ tell("Not yet","This pact can only be settled after its deadline:\n"+fmtDate(currentStatus.deadline)); return; }
+    const st=currentStatus, modern=st.escrow!==undefined, held=modern?fromWei(st.escrow):0;
+    let body, okLabel="Ask the jury";
+    if(modern && !st.evidence_url){
+      /* Nothing to judge. Say exactly what the contract will do, and who gets the money. */
+      body="No evidence was filed before the deadline closed, so there is nothing for the jury to read.\n\n"+
+           "Settling now closes the pact as NOT FULFILLED without consulting the jury"+
+           (held>0?(", and returns the "+held+" GEN escrow to Party A."):".");
+      okLabel="Close it";
+    } else {
+      const isImg=/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(st.evidence_url||"");
+      body="This asks the AI jury to "+(isImg?"look at the pinned evidence image":"read the pinned evidence file")+
+           " and rule whether the agreement was kept.\n\n"+
+           "Validators each judge it independently and must agree before the verdict is recorded on-chain. "+
+           "It usually takes a minute or two."+
+           (modern && held>0 ? ("\n\nThe verdict releases the "+held+" GEN escrow: FULFILLED pays Party B, NOT FULFILLED refunds Party A. The transfer lands when the ruling finalizes, a few minutes after the verdict shows.") : "");
+    }
+    const ok=await askConfirm("Settle this pact",body,okLabel,"Not yet");
     if(ok) runWrite("settle",{ok:"The jury has ruled. See the verdict above."},true);
   });
   /* ---------------- evidence: pin it, then file it ---------------- */
@@ -2013,7 +2095,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
 
   $("fileEvBtn").addEventListener("click",async()=>{
     if(needWallet())return;
-    if(!currentStatus){alert("Load a pact first.");return;}
+    if(!currentStatus){showToast("Load a pact first","Paste the pact address above and press Load pact.");return;}
     const el=$("f_ev"), v=el.value.trim();
     const bad=pinError(v);
     if(bad){
@@ -2035,9 +2117,9 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
 
   $("topUpBtn").addEventListener("click",async()=>{
     if(needWallet())return;
-    if(!currentStatus){alert("Load a pact first.");return;}
+    if(!currentStatus){showToast("Load a pact first","Paste the pact address above and press Load pact.");return;}
     const held=fromWei(currentStatus.escrow||"0");
-    const raw=prompt("How much GEN do you want to add to this pact?\n\nCurrently held: "+held+" GEN","1");
+    const raw=await askInput("Add more escrow","Currently held by this pact: "+held+" GEN.\n\nHow much more GEN do you want to lock in?","e.g. 1","1","Next","Never mind");
     if(raw===null) return;
     const amt=Number(String(raw).trim());
     if(isNaN(amt)||amt<=0){ setStatus($("actionStatus"),"✗ Enter an amount greater than zero."); return; }
@@ -2051,17 +2133,19 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   });
 
   $("cancelBtn").addEventListener("click",async()=>{
-    if(!currentStatus){alert("Load a pact first.");return;}
+    if(!currentStatus){showToast("Load a pact first","Paste the pact address above and press Load pact.");return;}
+    const heldC = currentStatus.escrow!==undefined ? fromWei(currentStatus.escrow) : 0;
     const ok=await askConfirm("Cancel this pact",
       "This permanently cancels the pact, and is only possible before it goes active, "+
-      "which means before both parties have signed.\n\nThis cannot be undone.",
+      "which means before both parties have signed.\n\nThis cannot be undone."+
+      (heldC>0?("\n\nThe "+heldC+" GEN escrow returns to Party A. It lands when the cancellation finalizes, a few minutes later."):""),
       "Cancel the pact","Keep it");
     if(ok) runWrite("cancel",{ok:"Pact cancelled."},false);
   });
 
   async function runWrite(fnName,labels,isSettle,args,value){
     if(needWallet())return;
-    if(!loadedContract){alert("Load a pact first.");return;}
+    if(!loadedContract){showToast("Load a pact first","Paste the pact address above and press Load pact.");return;}
     const before = currentStatus ? stateKey(currentStatus) : null;
     /* snapshot, not a reference: renderStatus overwrites currentStatus on every poll */
     const beforeStatus = currentStatus ? JSON.parse(JSON.stringify(currentStatus)) : null;
