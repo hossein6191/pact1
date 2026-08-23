@@ -85,28 +85,32 @@ def _pick(d: dict, *names):
     return None
 
 
-def _read_verdict(raw: str) -> tuple:
-    """Turn the model's answer into (verdict, reasoning).
+def _read_verdict(raw) -> tuple:
+    """Turn the model's answer (a dict in JSON mode, or any text) into
+    (verdict, reasoning).
 
     Returns "unfulfilled" whenever the answer cannot be read with confidence.
     Refusing to guess is the safe direction: a pact that wrongly reads as kept
     is far worse than one that asks the parties to look again.
     """
-    text = str(raw).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
-
     verdict = ""
     reasoning = ""
+    parsed = raw if isinstance(raw, dict) else None
+    text = "" if isinstance(raw, dict) else str(raw).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
 
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and start < end:
-        try:
-            parsed = json.loads(text[start:end + 1])
-            if isinstance(parsed, dict):
-                verdict = str(_pick(parsed, "verdict", "result", "answer", "decision") or "").strip().lower()
-                reasoning = str(_pick(parsed, "reasoning", "reason", "explanation", "why") or "").strip()
-        except Exception:
-            pass
+    if parsed is None:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and start < end:
+            try:
+                cand = json.loads(text[start:end + 1])
+                if isinstance(cand, dict):
+                    parsed = cand
+            except Exception:
+                parsed = None
+    if isinstance(parsed, dict):
+        verdict = str(_pick(parsed, "verdict", "result", "answer", "decision") or "").strip().lower()
+        reasoning = str(_pick(parsed, "reasoning", "reason", "explanation", "why") or "").strip()
 
     # No usable JSON: fall back to reading the bare words out of the text.
     if verdict not in ("fulfilled", "unfulfilled"):
@@ -197,12 +201,6 @@ class Pact(gl.Contract):
         assert v > u256(0), "Send an amount greater than zero"
         self.escrow = self.escrow + v
 
-    @gl.public.write.payable
-    def __receive__(self) -> None:
-        """A plain transfer with no method name lands here and joins the escrow."""
-        assert not self.is_settled, "This pact is already settled"
-        self.escrow = self.escrow + gl.message.value
-
     @gl.public.write
     def sign(self) -> None:
         assert gl.message.sender_address == self.party_b, "Only the counterparty can sign"
@@ -272,23 +270,36 @@ class Pact(gl.Contract):
         if _is_image(url):
             self.evidence_digest = "git-commit:" + _commit_of(url)
 
-            def look() -> str:
-                shot = gl.nondet.web.render(url, mode="screenshot")
-                prompt = ("You are a neutral arbitrator deciding whether a delivered image meets an agreement.\n\n"
-                          "THE AGREEMENT:\n" + terms + "\n\n"
-                          "You are looking at the delivered image itself. Judge only what is visibly there. "
-                          "Do not judge taste, quality or effort.\n\n"
-                          "Respond with ONLY this JSON and nothing else. No preamble, no reasoning out loud, no code fence:\n"
-                          '{"verdict": "fulfilled" or "unfulfilled", "reasoning": "at most 12 words naming what you actually see"}')
-                out = gl.nondet.exec_prompt(prompt, images=[shot])
-                return str(out).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
+            # Leader and validators each look at the picture themselves. The
+            # validator agrees only if its own verdict word is the leader's: the
+            # leader's answer is never authoritative, and the reasoning text is
+            # left free because two honest readers never phrase it identically.
+            def leader_fn():
+                def look():
+                    shot = gl.nondet.web.render(url, mode="screenshot")
+                    prompt = ("You are a neutral arbitrator deciding whether a delivered image meets an agreement.\n\n"
+                              "THE AGREEMENT:\n" + terms + "\n\n"
+                              "You are looking at the delivered image itself. Judge only what is visibly there. "
+                              "Do not judge taste, quality or effort.\n\n"
+                              "Respond with ONLY this JSON and nothing else. No preamble, no reasoning out loud, no code fence:\n"
+                              '{"verdict": "fulfilled" or "unfulfilled", "reasoning": "at most 12 words naming what you actually see"}')
+                    out = gl.nondet.exec_prompt(prompt, images=[shot], response_format="json")
+                    v, why = _read_verdict(out)
+                    return {"verdict": v, "reasoning": why}
+                return look()
 
-            raw = gl.eq_principle.prompt_comparative(
-                look,
-                "The value of the verdict field has to match exactly. "
-                "The reasoning field only has to describe the same image and reach the same conclusion.",
-            )
-            result, reasoning = _read_verdict(raw)
+            def validator_fn(leaders_res) -> bool:
+                if not isinstance(leaders_res, gl.vm.Return):
+                    return False
+                try:
+                    mine = leader_fn()
+                    return str(mine.get("verdict")) == str(leaders_res.calldata.get("verdict"))
+                except Exception:
+                    return False
+
+            judged = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+            result = str(judged.get("verdict", "unfulfilled"))
+            reasoning = str(judged.get("reasoning", ""))
             self.is_settled = True
             if result == "fulfilled":
                 self.verdict = "fulfilled"
@@ -321,9 +332,12 @@ class Pact(gl.Contract):
             return self.verdict
 
         # Step two is the judgment, and it runs over the content the validators
-        # already agreed on rather than over whatever each of them happened to fetch.
-        def judge() -> str:
-            prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
+        # already agreed on rather than over whatever each of them happened to
+        # fetch. Leader and validators each ask the model; the validator agrees
+        # only if its own verdict word is the leader's. The reasoning is free.
+        def leader_fn():
+            def judge():
+                prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
 
 THE AGREEMENT (plain language):
 {terms}
@@ -332,7 +346,7 @@ THE EVIDENCE ARTIFACT (fixed at commit {url}, identical for every validator):
 {page}
 
 Decide, based ONLY on what is actually present in the artifact above, whether the agreement's
-requirements were met. Be strict and literal: if the required result is not clearly present,
+requirements were met. Be strict and literal: if the required thing is not clearly present,
 it is not fulfilled. Judge the words of the agreement as written, not what you assume was
 intended.
 
@@ -342,18 +356,24 @@ Respond using ONLY this JSON format, nothing else:
 "reasoning": "two or three sentences naming the specific thing in the artifact that decided it, or the specific thing that was missing"
 }}
 Your output must be only JSON, with no prefix, suffix or code fence, and must parse cleanly."""
+                out = gl.nondet.exec_prompt(prompt, response_format="json")
+                v, why = _read_verdict(out)
+                return {"verdict": v, "reasoning": why}
+            return judge()
 
-            out = gl.nondet.exec_prompt(prompt)
-            return str(out).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
+        def validator_fn(leaders_res) -> bool:
+            if not isinstance(leaders_res, gl.vm.Return):
+                return False
+            try:
+                mine = leader_fn()
+                return str(mine.get("verdict")) == str(leaders_res.calldata.get("verdict"))
+            except Exception:
+                return False
 
-        raw = gl.eq_principle.prompt_comparative(
-            judge,
-            "The value of the verdict field has to match exactly. "
-            "The reasoning field only has to reach the same conclusion; "
-            "different wording is expected and acceptable.",
-        )
+        judged = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+        result = str(judged.get("verdict", "unfulfilled"))
+        reasoning = str(judged.get("reasoning", ""))
 
-        result, reasoning = _read_verdict(raw)
 
         self.is_settled = True
         if result == "fulfilled":

@@ -142,10 +142,11 @@ The trust problem is real and specific: today, two strangers online who disagree
 - `_pin_error()` rejects any evidence link that is not a 40-character commit hash on `raw.githubusercontent.com`. Pure, deterministic, and run before anything else.
 - `submit_evidence()` is restricted to the obligated party and to the window before the deadline.
 - `gl.eq_principle.strict_eq(...)` fetches a text artifact and forces byte-level agreement across validators **before** judgment begins.
-- `_is_image()` routes an image artifact down a second path instead: `web.render(url, mode="screenshot")` plus `exec_prompt(..., images=[...])`, with the answer held to a fixed short shape so validators can agree on what they saw.
+- `_is_image()` routes an image artifact down a second path instead: `web.render(url, mode="screenshot")` plus `exec_prompt(..., images=[...])`, under the same custom validator, with the answer held to a fixed short shape so validators can agree on what they saw.
+- `genvm-lint check` (the official linter) passes on `pact.py`.
 - `hashlib.sha256` of the agreed content is stored in `evidence_digest`, so the ruling is auditable against exact bytes.
 - An artifact that comes back empty or missing is ruled `unfulfilled` **before** the model is consulted, so a dead link can never produce a lucky pass.
-- `gl.eq_principle.prompt_comparative(...)` judges the already-agreed content. Verdicts must match exactly; wording of the reason is free.
+- `gl.vm.run_nondet_unsafe` with a **custom validator** judges the already-agreed content: the leader asks the model, every validator asks the model itself, and a validator agrees only if its own verdict word is the leader's. The reasoning is free text and is not part of consensus. A crashed leader gets a disagree, so consensus rotates instead of sealing an error.
 - `@gl.public.write.payable` + `gl.message.value` take the escrow in; `emit_transfer` pays it out to an ordinary wallet at finalization.
 - `_release()` is the single exit for money, and every terminal path calls it.
 

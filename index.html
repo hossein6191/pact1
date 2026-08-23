@@ -407,19 +407,18 @@
     <label for="f_terms">The agreement, in plain words<span class="req">*</span></label>
     <textarea id="f_terms" rows="3" placeholder="e.g. Sara delivers the finished logo to the repo by Friday."></textarea>
     <div class="tn-note" style="background:rgba(143,123,255,.07);border-color:rgba(188,162,255,.28)">
-      <b>Write a test, not a wish.</b> The jury reads the <i>text inside one pinned file</i> and checks it
-      against these words. It is good at facts it can see, and it cannot judge taste or effort.<br />
-      <b style="color:var(--ok)">Checkable:</b> “a file named <code>logo.svg</code> exists in the repo” ·
-      “the post is at least 500 words and mentions X, Y and Z” · “the README lists a Pricing section”.<br />
+      <b>Write a test, not a wish.</b> At settlement the jury opens <i>one file</i> the counterparty filed, fixed to a
+      commit so it can never change, and checks your words against what is visibly in it. It is good at facts it can
+      see and it cannot judge taste or effort.<br />
+      <b style="color:var(--ok)">Checkable:</b> “the file defines a function named <code>parse_orders</code>” ·
+      “the article is at least 800 words and mentions X, Y and Z” · “the image is a wordmark reading ACME, not a photo”.<br />
       <b style="color:var(--bad)">Not checkable:</b> “a <i>good</i> logo” · “a <i>professional</i> website” ·
       “real effort”. If you don’t set a bar, anything that exists will pass — a one-line article still counts
-      as an article, and a one-line website still counts as a website.<br />
-      <span style="opacity:.85"><b>Images can’t be judged at all.</b> The jury reads text only. It can confirm an image
-      file is <i>there</i> and named what you agreed; it can never see whether the picture is the one you wanted.
-      Agree the artwork between yourselves, and use the pact for the part a machine can actually verify.</span><br />
-      <span style="opacity:.85"><b>Using a suggestion below?</b> It’s a worked example, not text to use as-is — file names
-      like <code>logo.svg</code> or section names like <code>Pricing</code> are placeholders. Replace them with your
-      actual deliverable, or the jury will correctly rule not fulfilled against evidence that never had those exact words.</span>
+      as an article.<br />
+      <span style="opacity:.85"><b>Images are judged by sight.</b> If the filed file is a picture, the jury renders it and
+      looks at it, so “a wordmark reading ACME on a plain background” is checkable; “a beautiful logo” is not.
+      Text files are read as text, so “a file named logo.svg exists” is no longer a thing to write: name what must be
+      <i>inside</i> the file.</span>
     </div>
     <button type="button" class="suggest-btn" id="termsSuggestBtn">Need ideas? Pick a ready-made agreement ▾</button>
     <div class="suggest-list hidden" id="termsSuggestList"></div>
@@ -730,28 +729,32 @@ def _pick(d: dict, *names):
     return None
 
 
-def _read_verdict(raw: str) -> tuple:
-    """Turn the model's answer into (verdict, reasoning).
+def _read_verdict(raw) -> tuple:
+    """Turn the model's answer (a dict in JSON mode, or any text) into
+    (verdict, reasoning).
 
     Returns "unfulfilled" whenever the answer cannot be read with confidence.
     Refusing to guess is the safe direction: a pact that wrongly reads as kept
     is far worse than one that asks the parties to look again.
     """
-    text = str(raw).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
-
     verdict = ""
     reasoning = ""
+    parsed = raw if isinstance(raw, dict) else None
+    text = "" if isinstance(raw, dict) else str(raw).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
 
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and start < end:
-        try:
-            parsed = json.loads(text[start:end + 1])
-            if isinstance(parsed, dict):
-                verdict = str(_pick(parsed, "verdict", "result", "answer", "decision") or "").strip().lower()
-                reasoning = str(_pick(parsed, "reasoning", "reason", "explanation", "why") or "").strip()
-        except Exception:
-            pass
+    if parsed is None:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and start < end:
+            try:
+                cand = json.loads(text[start:end + 1])
+                if isinstance(cand, dict):
+                    parsed = cand
+            except Exception:
+                parsed = None
+    if isinstance(parsed, dict):
+        verdict = str(_pick(parsed, "verdict", "result", "answer", "decision") or "").strip().lower()
+        reasoning = str(_pick(parsed, "reasoning", "reason", "explanation", "why") or "").strip()
 
     # No usable JSON: fall back to reading the bare words out of the text.
     if verdict not in ("fulfilled", "unfulfilled"):
@@ -842,12 +845,6 @@ class Pact(gl.Contract):
         assert v > u256(0), "Send an amount greater than zero"
         self.escrow = self.escrow + v
 
-    @gl.public.write.payable
-    def __receive__(self) -> None:
-        """A plain transfer with no method name lands here and joins the escrow."""
-        assert not self.is_settled, "This pact is already settled"
-        self.escrow = self.escrow + gl.message.value
-
     @gl.public.write
     def sign(self) -> None:
         assert gl.message.sender_address == self.party_b, "Only the counterparty can sign"
@@ -917,23 +914,36 @@ class Pact(gl.Contract):
         if _is_image(url):
             self.evidence_digest = "git-commit:" + _commit_of(url)
 
-            def look() -> str:
-                shot = gl.nondet.web.render(url, mode="screenshot")
-                prompt = ("You are a neutral arbitrator deciding whether a delivered image meets an agreement.\n\n"
-                          "THE AGREEMENT:\n" + terms + "\n\n"
-                          "You are looking at the delivered image itself. Judge only what is visibly there. "
-                          "Do not judge taste, quality or effort.\n\n"
-                          "Respond with ONLY this JSON and nothing else. No preamble, no reasoning out loud, no code fence:\n"
-                          '{"verdict": "fulfilled" or "unfulfilled", "reasoning": "at most 12 words naming what you actually see"}')
-                out = gl.nondet.exec_prompt(prompt, images=[shot])
-                return str(out).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
+            # Leader and validators each look at the picture themselves. The
+            # validator agrees only if its own verdict word is the leader's: the
+            # leader's answer is never authoritative, and the reasoning text is
+            # left free because two honest readers never phrase it identically.
+            def leader_fn():
+                def look():
+                    shot = gl.nondet.web.render(url, mode="screenshot")
+                    prompt = ("You are a neutral arbitrator deciding whether a delivered image meets an agreement.\n\n"
+                              "THE AGREEMENT:\n" + terms + "\n\n"
+                              "You are looking at the delivered image itself. Judge only what is visibly there. "
+                              "Do not judge taste, quality or effort.\n\n"
+                              "Respond with ONLY this JSON and nothing else. No preamble, no reasoning out loud, no code fence:\n"
+                              '{"verdict": "fulfilled" or "unfulfilled", "reasoning": "at most 12 words naming what you actually see"}')
+                    out = gl.nondet.exec_prompt(prompt, images=[shot], response_format="json")
+                    v, why = _read_verdict(out)
+                    return {"verdict": v, "reasoning": why}
+                return look()
 
-            raw = gl.eq_principle.prompt_comparative(
-                look,
-                "The value of the verdict field has to match exactly. "
-                "The reasoning field only has to describe the same image and reach the same conclusion.",
-            )
-            result, reasoning = _read_verdict(raw)
+            def validator_fn(leaders_res) -> bool:
+                if not isinstance(leaders_res, gl.vm.Return):
+                    return False
+                try:
+                    mine = leader_fn()
+                    return str(mine.get("verdict")) == str(leaders_res.calldata.get("verdict"))
+                except Exception:
+                    return False
+
+            judged = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+            result = str(judged.get("verdict", "unfulfilled"))
+            reasoning = str(judged.get("reasoning", ""))
             self.is_settled = True
             if result == "fulfilled":
                 self.verdict = "fulfilled"
@@ -966,9 +976,12 @@ class Pact(gl.Contract):
             return self.verdict
 
         # Step two is the judgment, and it runs over the content the validators
-        # already agreed on rather than over whatever each of them happened to fetch.
-        def judge() -> str:
-            prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
+        # already agreed on rather than over whatever each of them happened to
+        # fetch. Leader and validators each ask the model; the validator agrees
+        # only if its own verdict word is the leader's. The reasoning is free.
+        def leader_fn():
+            def judge():
+                prompt = f"""You are a neutral arbitrator deciding whether a real agreement was kept.
 
 THE AGREEMENT (plain language):
 {terms}
@@ -977,7 +990,7 @@ THE EVIDENCE ARTIFACT (fixed at commit {url}, identical for every validator):
 {page}
 
 Decide, based ONLY on what is actually present in the artifact above, whether the agreement's
-requirements were met. Be strict and literal: if the required result is not clearly present,
+requirements were met. Be strict and literal: if the required thing is not clearly present,
 it is not fulfilled. Judge the words of the agreement as written, not what you assume was
 intended.
 
@@ -987,18 +1000,24 @@ Respond using ONLY this JSON format, nothing else:
 "reasoning": "two or three sentences naming the specific thing in the artifact that decided it, or the specific thing that was missing"
 }}
 Your output must be only JSON, with no prefix, suffix or code fence, and must parse cleanly."""
+                out = gl.nondet.exec_prompt(prompt, response_format="json")
+                v, why = _read_verdict(out)
+                return {"verdict": v, "reasoning": why}
+            return judge()
 
-            out = gl.nondet.exec_prompt(prompt)
-            return str(out).replace(_FENCE + "json", "").replace(_FENCE, "").strip()
+        def validator_fn(leaders_res) -> bool:
+            if not isinstance(leaders_res, gl.vm.Return):
+                return False
+            try:
+                mine = leader_fn()
+                return str(mine.get("verdict")) == str(leaders_res.calldata.get("verdict"))
+            except Exception:
+                return False
 
-        raw = gl.eq_principle.prompt_comparative(
-            judge,
-            "The value of the verdict field has to match exactly. "
-            "The reasoning field only has to reach the same conclusion; "
-            "different wording is expected and acceptable.",
-        )
+        judged = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+        result = str(judged.get("verdict", "unfulfilled"))
+        reasoning = str(judged.get("reasoning", ""))
 
-        result, reasoning = _read_verdict(raw)
 
         self.is_settled = True
         if result == "fulfilled":
@@ -2217,19 +2236,37 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   /* Every example describes what has to be INSIDE one file, because that is what the
      jury now reads: a single artifact, pinned to a commit, byte for byte. Terms that
      talk about a folder or a repository page no longer match how evidence is filed. */
+  /* Every template is written the way the jury actually reads: ONE pinned file,
+     a numbered list of things that must be visibly present in it, and a note on
+     what that wording costs. Each [PLACEHOLDER] must be replaced; the form warns
+     if one is left behind. */
   const TERMS_IDEAS=[
-    ["Design \u2014 logo delivery","By the deadline, the counterparty files the logo image itself. Fulfilled only if the image is a graphic mark or wordmark on a plain background, and not a photograph or a portrait of a person. NOTE: the jury renders the image and looks at it, but it judges what is visibly there, never whether the design is good."],
-    ["Design \u2014 the right wordmark","By the deadline, the counterparty files the logo image itself. Fulfilled only if the text visible in the image reads exactly [BRAND NAME]."],
-    ["Design \u2014 shape and colour","By the deadline, the counterparty files the design image itself. Fulfilled only if the image shows [SHAPE, e.g. a circular mark] in [COLOUR, e.g. blue]."],
-    ["Freelance \u2014 article writing","By the deadline, the counterparty files a text file containing a finished article about [TOPIC] of at least [WORD COUNT, e.g. 500] words, with a title line and at least [NUMBER, e.g. 3] subheadings. Fulfilled only if all of that is present in the file itself."],
-    ["Freelance \u2014 website copy","By the deadline, the counterparty files a single file containing the finished copy for these sections: [SECTION NAMES, e.g. Home, Pricing, Contact]. Fulfilled only if every one of those section headings appears in the file, each with at least one paragraph under it."],
-    ["Code \u2014 ship a function","By the deadline, the counterparty files a source file that defines [FUNCTION OR CLASS NAME] and handles [WHAT IT MUST HANDLE]. Fulfilled only if that definition is present in the file."],
-    ["Code \u2014 write the tests","By the deadline, the counterparty files a test file containing at least [NUMBER, e.g. 5] separate test cases covering [WHAT IS BEING TESTED]. Fulfilled only if that many distinct tests are visible in the file."],
-    ["Docs \u2014 write a guide","By the deadline, the counterparty files a document that is a setup guide for [WHAT IT SETS UP], containing numbered steps, a prerequisites list, and at least one code block. Fulfilled only if all three are present."],
-    ["Docs \u2014 changelog entry","By the deadline, the counterparty files a changelog that names [FEATURE NAME] under a version above [CURRENT VERSION]. Fulfilled only if both the feature name and such a version appear."],
-    ["Data \u2014 deliver a dataset","By the deadline, the counterparty files a data file with a header row containing the columns [COLUMN NAMES] and at least [NUMBER, e.g. 100] rows of data. Fulfilled only if the header matches and the rows are there."],
-    ["Translation \u2014 deliver a translation","By the deadline, the counterparty files the full [TARGET LANGUAGE] translation of [WHAT IS BEING TRANSLATED], covering every section of the original. Fulfilled only if no section is missing."],
-    ["Research \u2014 write a summary","By the deadline, the counterparty files a summary of [SUBJECT] that names at least [NUMBER, e.g. 3] distinct sources and states a conclusion. Fulfilled only if the sources and the conclusion are both in the file."]
+    ["Design — logo delivery (image)",
+     "DELIVERABLE: one image file (PNG or JPG) filed as the pinned evidence.\nPASS ONLY IF: (1) the image is a graphic mark or wordmark, not a photograph and not a portrait of a person; (2) the text visible in the image reads exactly [BRAND NAME]; (3) the background is [PLAIN OR A COLOUR, e.g. plain white].\nNOTE: the jury looks at the picture and judges only what is visible. It never judges whether the design is good."],
+    ["Design — social banner (image)",
+     "DELIVERABLE: one image file filed as the pinned evidence.\nPASS ONLY IF: (1) the image is wider than it is tall; (2) it contains the headline text [HEADLINE] exactly; (3) it contains the name [BRAND NAME]; (4) no placeholder text such as Lorem ipsum is visible.\nNOTE: visible facts only; style and beauty are not grounds either way."],
+    ["Freelance — article",
+     "DELIVERABLE: one text or Markdown file filed as the pinned evidence.\nPASS ONLY IF: (1) the first line is a title; (2) the body is about [TOPIC] and is at least [WORD COUNT, e.g. 800] words; (3) there are at least [NUMBER, e.g. 3] subheadings; (4) the text mentions [KEYWORDS, e.g. X, Y and Z] at least once each.\nNOTE: the jury counts and matches literally. A 790-word article fails an 800-word bar."],
+    ["Freelance — website copy",
+     "DELIVERABLE: one file with the finished copy, filed as the pinned evidence.\nPASS ONLY IF: (1) it contains a heading for each of these sections: [SECTION NAMES, e.g. Home, Pricing, Contact]; (2) every section has at least one paragraph of real copy under it; (3) it contains a call to action that names [PRODUCT NAME].\nNOTE: headings present but empty do not count as copy."],
+    ["Code — ship a function or class",
+     "DELIVERABLE: one source file filed as the pinned evidence.\nPASS ONLY IF: (1) it defines [FUNCTION OR CLASS NAME]; (2) that code visibly handles [THE CASE IT MUST HANDLE, e.g. an empty input]; (3) it has a docstring or comment stating its inputs and output.\nNOTE: the jury reads code as text. It checks what is written, it does not run it."],
+    ["Code — the tests",
+     "DELIVERABLE: one test file filed as the pinned evidence.\nPASS ONLY IF: (1) it contains at least [NUMBER, e.g. 5] separate test functions; (2) each is named test_ something; (3) together they exercise [WHAT IS BEING TESTED]; (4) at least one test covers the failure case [FAILURE CASE].\nNOTE: count is literal; four tests fail a bar of five."],
+    ["GenLayer — an Intelligent Contract",
+     "DELIVERABLE: one Python contract file filed as the pinned evidence.\nPASS ONLY IF: (1) it defines a class named [CONTRACT NAME] that inherits gl.Contract; (2) it has a public write method named [METHOD NAME]; (3) that method reaches consensus through [CONSENSUS METHOD, e.g. gl.eq_principle.strict_eq or a custom validator]; (4) every storage field uses a storage-safe type (no list or dict).\nNOTE: the jury checks the source text for these facts; it does not deploy or execute it."],
+    ["Docs — setup guide",
+     "DELIVERABLE: one document filed as the pinned evidence.\nPASS ONLY IF: (1) it is a setup guide for [WHAT IT SETS UP]; (2) it has a prerequisites list; (3) it has numbered steps; (4) it has at least one code block; (5) it has a troubleshooting or FAQ section.\nNOTE: all five must be visibly present."],
+    ["Docs — changelog entry",
+     "DELIVERABLE: one changelog file filed as the pinned evidence.\nPASS ONLY IF: (1) it has an entry for a version number higher than [CURRENT VERSION]; (2) that entry names [FEATURE NAME]; (3) the entry carries a date.\nNOTE: version comparison is literal, e.g. 2.1.0 is above 2.0.9."],
+    ["Data — a dataset (CSV)",
+     "DELIVERABLE: one CSV file filed as the pinned evidence.\nPASS ONLY IF: (1) the header row contains the columns [COLUMN NAMES] in that order; (2) there are at least [NUMBER, e.g. 100] data rows after the header; (3) the column [KEY COLUMN] is non-empty in every one of the first 20 rows.\nNOTE: the jury reads the file as text, so keep it a plain CSV, not a spreadsheet."],
+    ["Translation — a full translation",
+     "DELIVERABLE: one text file filed as the pinned evidence.\nPASS ONLY IF: (1) it is written in [TARGET LANGUAGE]; (2) it has the same [NUMBER] section headings as the original, in the same order; (3) no paragraph is left in [SOURCE LANGUAGE].\nNOTE: the jury can tell languages apart and count sections; it does not grade translation quality."],
+    ["Research — a sourced summary",
+     "DELIVERABLE: one document filed as the pinned evidence.\nPASS ONLY IF: (1) it summarises [SUBJECT]; (2) it names at least [NUMBER, e.g. 3] distinct sources, each with a title or URL; (3) it ends with a clearly labelled conclusion; (4) it is at least [WORD COUNT, e.g. 400] words.\nNOTE: sources must be named in the file itself; the jury will not follow links out of it."],
+    ["Bet — a public prediction",
+     "DELIVERABLE: one text file filed as the pinned evidence, quoting the public source.\nPASS ONLY IF: (1) the file quotes [PUBLIC SOURCE, e.g. the official results page] verbatim; (2) the quoted text states that [PREDICTED OUTCOME] happened; (3) the quote carries the date [DATE].\nNOTE: the jury judges the filed file, so the quote must be in it; file it before the deadline."]
   ];
   function wireSuggest(btnId,listId,ideas,targetId,onPick){
     const list=$(listId), btn=$(btnId), labelClosed=btn.textContent;
@@ -2250,8 +2287,18 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
      is a placeholder for the real deliverable. Selecting the text and toasting a reminder
      is what stops someone from testing a real evidence URL against someone else's file names,
      which reads exactly like a broken jury when it is really just an unedited template. */
+  /* A template is several lines; a three-row box that silently scrolls hides
+     most of what was just inserted. Grow to fit, and keep growing as they edit. */
+  function autosizeTerms(){
+    const t=$("f_terms"); if(!t) return;
+    const fit=()=>{ t.style.height="auto"; t.style.height=Math.max(100, t.scrollHeight+6)+"px"; };
+    /* measure now, and again once the card's reveal transition and web fonts have
+       settled, otherwise the first measurement can be taken mid-animation */
+    fit(); requestAnimationFrame(fit); setTimeout(fit,400);
+  }
+  { const t=$("f_terms"); if(t) t.addEventListener("input",autosizeTerms); }
   wireSuggest("termsSuggestBtn","termsSuggestList",TERMS_IDEAS,"f_terms",(el)=>{
-    el.focus(); el.select();
+    autosizeTerms(); el.focus(); el.select();
     showToast("Now make it yours","This is a worked example. Replace the specific file names, numbers or sections with your actual deliverable \u2014 the jury checks these exact words.");
   });
 
