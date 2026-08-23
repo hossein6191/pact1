@@ -1661,13 +1661,15 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
          refusing outright stopped people showing that the jury really does reject
          evidence. Say plainly what will happen and let the person decide. */
       $("f_terms").style.borderColor="#ffd27a";
+      const escNum=Number($("f_escrow").value.trim()||"0");
       const ok=await askConfirm(
         "Placeholders still in your agreement",
         "Still unfilled:\n\n"+leftover.join("\n")+"\n\n"+
         "The jury matches your words literally against the filed evidence. Left like this it will "+
-        "look for the bracketed text itself, not find it, and rule NOT FULFILLED.\n\n"+
+        "look for the bracketed text itself, not find it, and rule NOT FULFILLED"+
+        (escNum>0?" \u2014 and the "+escNum+" GEN escrow will come back to you instead of paying the counterparty":"")+".\n\n"+
         "That is fine if you are deliberately demonstrating a rejection. If you meant to describe "+
-        "real work, go back and replace each placeholder with the actual file name, number or topic.",
+        "real work, go back and replace each bracketed placeholder with the real section names, file names or numbers.",
         "Continue anyway", "Go back and edit");
       if(!ok){ $("f_terms").focus(); return; }
       showToast("Continuing with placeholders","Expect a NOT FULFILLED ruling \u2014 the jury will look for the bracketed text and not find it.");
