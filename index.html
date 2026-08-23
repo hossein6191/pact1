@@ -888,9 +888,13 @@ class Pact(gl.Contract):
 
     @gl.public.write
     def settle(self) -> str:
+        """Ask the jury. Open to anyone after the deadline. Before it, only the
+        obligated party may settle, and only once they have filed evidence: the
+        window before the deadline is theirs, so they are the one who may waive it."""
         assert self.is_active, "Both parties must sign before judging"
         assert not self.is_settled, "This pact is already settled"
-        assert self._now() >= self.deadline, "The deadline has not passed yet"
+        early_ok = (gl.message.sender_address == self.party_b and self.evidence_url != "")
+        assert self._now() >= self.deadline or early_ok, "Before the deadline only the obligated party can settle, and only after filing evidence"
 
         # Nothing was ever filed. Close it without asking a model to reason about
         # an absence, and send the money back.
@@ -1310,7 +1314,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   function handleTxError(err,target){
     var m=err&&err.message||String(err);
     var el=$(target);
-    if(m.includes("deadline has not"))setStatus(el,"\u25F7 The deadline hasn't passed yet, so it can't be settled. Come back after the deadline.");
+    if(m.includes("deadline has not")||m.includes("only the obligated party can settle"))setStatus(el,"\u25F7 Not yet: before the deadline only Party B can settle, and only after filing evidence. Everyone can settle once the deadline has passed.");
     else if(m.includes("Both parties must sign"))setStatus(el,"\u2717 Both parties must sign before the pact can be judged.");
     else if(m.includes("already signed"))setStatus(el,"You've already signed this pact \u2014 it's the other party's turn now.");
     else if(m.includes("Only the counterparty"))setStatus(el,"\u2717 Only the counterparty's wallet (Party B) can sign. Switch to that account in your wallet.");
@@ -1909,8 +1913,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       if(signProvisional)showFinalizingNote("Both signatures are recorded on-chain and being finalized (usually a couple of minutes on the Studio network). The pact is active either way."); else clearFinalizingNote();
       clearReasonNote();
       $("signBtn").classList.add("hidden");
-      const past=(Date.now()/1000)>=Number(s.deadline);
-      $("settleBtn").disabled=!past; $("settleBtn").title=past?"":"Available after the deadline";
+      refreshSettleButton(s,role);
       $("cancelBtn").disabled=true;
       if(prev && !prev.is_active){ burstConfetti(); sWin(); }
     }else{
@@ -1928,6 +1931,34 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   }
 
   function sameAddr(a,b){ return !!a&&!!b&&String(a).toLowerCase()===String(b).toLowerCase(); }
+
+  function fmtCountdown(ts){
+    const d=Math.max(0, Math.round(Number(ts)-Date.now()/1000));
+    if(d<60) return "in under a minute";
+    const h=Math.floor(d/3600), m=Math.floor((d%3600)/60);
+    return "in "+(h?h+"h ":"")+m+"m";
+  }
+  /* Who may settle, and when. Anyone after the deadline. Before it, only the
+     obligated party and only once they have filed: the window is theirs to waive.
+     The label says which of those it is waiting for, so "greyed out" never reads as broken. */
+  function canSettleNow(s,role){
+    const past=(Date.now()/1000)>=Number(s.deadline);
+    const modern=s.escrow!==undefined;
+    const early=modern && role==="B" && !!s.evidence_url;
+    return {past, early, can: past||early};
+  }
+  function refreshSettleButton(s,role){
+    const b=$("settleBtn"); if(!b||!s) return;
+    if(!s.is_active || s.is_settled){ b.disabled=true; return; }
+    const c=canSettleNow(s,role);
+    b.disabled=!c.can;
+    if(c.past) b.textContent="Settle (ask the AI jury) ⚖";
+    else if(c.early) b.textContent="Settle now (ask the AI jury) ⚖";
+    else b.textContent="Settle opens "+fmtCountdown(s.deadline)+" · "+fmtDate(s.deadline);
+    b.title=c.can?"":(role==="B"?"File your evidence first, then you can settle straight away; otherwise anyone can after the deadline.":"Opens after the deadline. Party B can settle earlier once they have filed their evidence.");
+  }
+  /* the countdown has to move even when the chain state does not */
+  setInterval(()=>{ if(currentStatus && !currentStatus.is_settled) refreshSettleButton(currentStatus, walletRole(currentStatus)); }, 20000);
 
   /* Who is allowed to do what, decided from chain state rather than from whatever
      the last screen happened to show. Filing evidence is Party B's alone and only
@@ -2037,9 +2068,13 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   $("settleBtn").addEventListener("click",async()=>{
     if(!currentStatus){showToast("Load a pact first","Paste the pact address above and press Load pact.");return;}
     if(!currentStatus.is_active){ tell("Not active yet","Both parties must sign before this pact can be settled."); return; }
-    const past=(Date.now()/1000)>=Number(currentStatus.deadline);
-    if(!past){ tell("Not yet","This pact can only be settled after its deadline:\n"+fmtDate(currentStatus.deadline)); return; }
+    const roleS=walletRole(currentStatus), cs=canSettleNow(currentStatus,roleS);
+    if(!cs.can){
+      tell("Not yet", roleS==="B"
+        ? "File your evidence first. Once it is filed you can settle straight away, without waiting for the deadline.\n\nOtherwise settlement opens for everyone at "+fmtDate(currentStatus.deadline)+" ("+fmtCountdown(currentStatus.deadline)+")."
+        : "Settlement opens for everyone at "+fmtDate(currentStatus.deadline)+" ("+fmtCountdown(currentStatus.deadline)+").\n\nParty B can settle earlier, once they have filed their evidence."); return; }
     const st=currentStatus, modern=st.escrow!==undefined, held=modern?fromWei(st.escrow):0;
+    const earlyNote = (!cs.past && cs.early) ? "\n\nYou are settling before the deadline. That is your right as the obligated party, and it means you give up the rest of your window to replace the evidence." : "";
     let body, okLabel="Ask the jury";
     if(modern && !st.evidence_url){
       /* Nothing to judge. Say exactly what the contract will do, and who gets the money. */
@@ -2055,7 +2090,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
            "It usually takes a minute or two."+
            (modern && held>0 ? ("\n\nThe verdict releases the "+held+" GEN escrow: FULFILLED pays Party B, NOT FULFILLED refunds Party A. The transfer lands when the ruling finalizes, a few minutes after the verdict shows.") : "");
     }
-    const ok=await askConfirm("Settle this pact",body,okLabel,"Not yet");
+    const ok=await askConfirm("Settle this pact",body+earlyNote,okLabel,"Not yet");
     if(ok) runWrite("settle",{ok:"The jury has ruled. See the verdict above."},true);
   });
   /* ---------------- evidence: pin it, then file it ---------------- */
@@ -2076,22 +2111,69 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   /* Turns an ordinary GitHub link into a pinned one by asking GitHub what commit the
      branch points at right now. Read-only and unauthenticated, so it is rate limited;
      when it fails the person can still paste a pinned link by hand. */
-  async function pinGithubUrl(url){
-    const u=(url||"").trim();
-    let owner,repo,ref,path;
-    let m=u.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:blob|raw|tree)\/([^/]+)\/(.+)$/);
-    if(m){ owner=m[1];repo=m[2];ref=m[3];path=m[4]; }
-    else{
-      m=u.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/);
-      if(m){ owner=m[1];repo=m[2];ref=m[3];path=m[4]; }
-    }
-    if(!owner) throw new Error("That does not look like a link to a file inside a GitHub repository. It needs the repo and the path to one file, for example https://github.com/owner/repo/blob/main/logo.svg");
-    if(/^[0-9a-f]{40}$/i.test(ref)) return RAW_PREFIX+owner+"/"+repo+"/"+ref.toLowerCase()+"/"+path;
-    const r=await fetch("https://api.github.com/repos/"+owner+"/"+repo+"/commits/"+encodeURIComponent(ref));
-    if(!r.ok) throw new Error("GitHub answered "+r.status+" when asked what commit “"+ref+"” points at. Check the repo is public and the branch name is right.");
+  /* Parse any GitHub link into its parts, and say whether it was a folder link. */
+  function parseGithub(url){
+    const u=(url||"").trim().replace(/[?#].*$/,"");
+    let m=u.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(blob|raw|tree)\/([^/]+)\/?(.*)$/);
+    if(m) return {owner:m[1],repo:m[2],kind:m[3],ref:m[4],path:m[5].replace(/\/+$/,"")};
+    m=u.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/);
+    if(m) return {owner:m[1],repo:m[2],kind:"repo",ref:"",path:""};
+    m=u.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/?(.*)$/);
+    if(m) return {owner:m[1],repo:m[2],kind:"raw",ref:m[3],path:m[4].replace(/\/+$/,"")};
+    return null;
+  }
+  async function commitOf(owner,repo,ref){
+    if(/^[0-9a-f]{40}$/i.test(ref)) return ref.toLowerCase();
+    const r=await fetch("https://api.github.com/repos/"+owner+"/"+repo+"/commits/"+encodeURIComponent(ref||"HEAD"));
+    if(!r.ok) throw new Error("GitHub answered "+r.status+" when asked what commit “"+(ref||"the default branch")+"” points at. Check the repo is public and the branch name is right.");
     const j=await r.json();
     if(!j||!j.sha) throw new Error("GitHub did not return a commit for “"+ref+"”.");
-    return RAW_PREFIX+owner+"/"+repo+"/"+String(j.sha).toLowerCase()+"/"+path;
+    return String(j.sha).toLowerCase();
+  }
+  /* Files inside a folder at a commit, so a folder link can become a choice of
+     one file instead of a dead raw URL. */
+  async function listFolder(owner,repo,sha,path){
+    const r=await fetch("https://api.github.com/repos/"+owner+"/"+repo+"/contents/"+(path?path.split("/").map(encodeURIComponent).join("/"):"")+"?ref="+sha);
+    if(!r.ok) return null;
+    const j=await r.json();
+    if(!Array.isArray(j)) return null;
+    return j.filter(x=>x.type==="file").map(x=>({name:x.name,path:x.path,size:x.size}));
+  }
+  /* Does the pinned raw URL actually serve a file? raw.githubusercontent.com allows
+     cross-origin GET, so this is checkable from the page before a transaction is
+     spent on a link that would make the jury read a 404. */
+  async function checkRaw(url){
+    try{
+      const r=await fetch(url,{method:"GET",cache:"no-store"});
+      const type=(r.headers.get("content-type")||"").split(";")[0];
+      const len=Number(r.headers.get("content-length")||0);
+      return {ok:r.ok,status:r.status,type,len};
+    }catch(e){ return {ok:false,status:0,type:"",len:0,err:String(e&&e.message||e)}; }
+  }
+  function fmtBytes(n){ if(!n) return ""; if(n<1024) return n+" B"; if(n<1048576) return (n/1024).toFixed(1)+" KB"; return (n/1048576).toFixed(1)+" MB"; }
+
+  async function pinGithubUrl(url){
+    const g=parseGithub(url);
+    if(!g) throw new Error("That does not look like a link to a file inside a GitHub repository. It needs the repo and the path to one file, for example https://github.com/owner/repo/blob/main/logo.svg");
+    const sha=await commitOf(g.owner,g.repo,g.ref);
+    if(g.kind==="tree"||g.kind==="repo"||!g.path){
+      const files=await listFolder(g.owner,g.repo,sha,g.path);
+      const err=new Error("That link is a folder, and the jury reads exactly one file. Pick the file below"+(files&&files.length?":":" (nothing listable was found in it)."));
+      err.files=(files||[]).map(f=>({name:f.name,size:f.size,url:RAW_PREFIX+g.owner+"/"+g.repo+"/"+sha+"/"+f.path.split("/").map(encodeURIComponent).join("/")}));
+      throw err;
+    }
+    return RAW_PREFIX+g.owner+"/"+g.repo+"/"+sha+"/"+g.path;
+  }
+  function showFileChoices(files){
+    let box=$("fileChoices");
+    if(!box){ box=document.createElement("div"); box.id="fileChoices"; box.style.cssText="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0"; $("f_ev").parentNode.insertBefore(box,$("f_ev").nextSibling); }
+    box.innerHTML="";
+    files.slice(0,40).forEach(f=>{
+      const b=document.createElement("button"); b.type="button"; b.className="btn-ghost"; b.style.cssText="padding:6px 10px;font-size:12.5px";
+      b.textContent=f.name+(f.size?" · "+fmtBytes(f.size):"");
+      b.addEventListener("click",()=>{ $("f_ev").value=f.url; $("f_ev").dispatchEvent(new Event("input",{bubbles:true})); box.remove(); setStatus($("actionStatus"),"✓ Pinned to one file:\n"+f.url); });
+      box.appendChild(b);
+    });
   }
 
   $("pinBtn").addEventListener("click",async()=>{
@@ -2104,11 +2186,14 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       /* Setting .value in code does not fire input, so the live pinned/not-pinned
          note under the field would keep showing the old warning. Fire it by hand. */
       el.dispatchEvent(new Event("input",{bubbles:true}));
-      setStatus($("actionStatus"),"✓ Pinned. This link now names an exact commit, so its contents can never change:\n"+pinned);
-      showToast("Pinned to a commit 📌","Check it opens the file you mean, then file it as your evidence.");
+      const chk=await checkRaw(pinned);
+      if(chk.ok) setStatus($("actionStatus"),"✓ Pinned and reachable ("+(chk.type||"file")+(chk.len?", "+fmtBytes(chk.len):"")+"). This link names an exact commit, so its contents can never change:\n"+pinned);
+      else setStatus($("actionStatus"),"⚠ Pinned, but the link does not serve a file (HTTP "+chk.status+"). If this is a folder, pick one file inside it. Filing it as it is would make the jury read nothing and rule NOT FULFILLED.\n"+pinned);
+      showToast(chk.ok?"Pinned to a commit 📌":"Pinned, but not a file","Check it is the file you mean, then file it as your evidence.");
     }catch(err){
       el.style.borderColor="#ff9d8a";
       setStatus($("actionStatus"),"✗ "+(err&&err.message||String(err)));
+      if(err&&err.files&&err.files.length) showFileChoices(err.files);
     }
   });
 
@@ -2123,6 +2208,17 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       sFail(); return;
     }
     el.style.borderColor="";
+    /* Last gate before a transaction: the pinned URL must actually serve a file.
+       A folder path or a typo passes the format rule and then makes the jury read a
+       404, which it correctly rules NOT FULFILLED. Catch it here instead. */
+    setStatus($("actionStatus"),"Checking that the link serves a file…",true);
+    const chk=await checkRaw(v);
+    if(!chk.ok){
+      el.style.borderColor="#ff9d8a";
+      setStatus($("actionStatus"),"✗ That link does not serve a file (HTTP "+chk.status+"). It is probably a folder, or the file does not exist at that commit.\n\nThe jury opens exactly one file; pointing it at this would make it read nothing and rule NOT FULFILLED. Paste a link to the file itself and press “Pin it for me”.");
+      sFail(); return;
+    }
+    $("actionStatus").classList.add("hidden");
     const replacing=!!currentStatus.evidence_url;
     const ok=await askConfirm(replacing?"Replace your evidence":"File this as your evidence",
       (replacing?"This replaces what you filed earlier. ":"")+

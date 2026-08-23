@@ -244,9 +244,13 @@ class Pact(gl.Contract):
 
     @gl.public.write
     def settle(self) -> str:
+        """Ask the jury. Open to anyone after the deadline. Before it, only the
+        obligated party may settle, and only once they have filed evidence: the
+        window before the deadline is theirs, so they are the one who may waive it."""
         assert self.is_active, "Both parties must sign before judging"
         assert not self.is_settled, "This pact is already settled"
-        assert self._now() >= self.deadline, "The deadline has not passed yet"
+        early_ok = (gl.message.sender_address == self.party_b and self.evidence_url != "")
+        assert self._now() >= self.deadline or early_ok, "Before the deadline only the obligated party can settle, and only after filing evidence"
 
         # Nothing was ever filed. Close it without asking a model to reason about
         # an absence, and send the money back.
