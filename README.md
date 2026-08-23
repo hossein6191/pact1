@@ -142,7 +142,7 @@ The trust problem is real and specific: today, two strangers online who disagree
 - `_pin_error()` rejects any evidence link that is not a 40-character commit hash on `raw.githubusercontent.com`. Pure, deterministic, and run before anything else.
 - `submit_evidence()` is restricted to the obligated party and to the window before the deadline.
 - `gl.eq_principle.strict_eq(...)` fetches a text artifact and forces byte-level agreement across validators **before** judgment begins.
-- `_is_image()` routes an image artifact down a second path instead: `web.render(url, mode="screenshot")` plus `exec_prompt(..., images=[...])`, under the same custom validator, with the answer held to a fixed short shape so validators can agree on what they saw.
+- `_is_image()` routes an image artifact down a second path instead: the file's own bytes are fetched with `web.get` (the same bytes the commit pins) and handed to `exec_prompt(..., images=[...])`, under the same custom validator, with the answer held to a fixed short shape so validators can agree on what they saw. If the bytes cannot be fetched, or the model reports seeing no image, the settle raises and can be retried; it never seals a guess.
 - `genvm-lint check` (the official linter) passes on `pact.py`.
 - `hashlib.sha256` of the agreed content is stored in `evidence_digest`, so the ruling is auditable against exact bytes.
 - An artifact that comes back empty or missing is ruled `unfulfilled` **before** the model is consulted, so a dead link can never produce a lucky pass.

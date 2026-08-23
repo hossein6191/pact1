@@ -280,15 +280,37 @@ class Pact(gl.Contract):
             # left free because two honest readers never phrase it identically.
             def leader_fn():
                 def look():
-                    shot = gl.nondet.web.render(url, mode="screenshot")
+                    # The image is passed to the model as the file's own bytes, the
+                    # same bytes the commit pins, rather than as a browser screenshot
+                    # of the URL. A screenshot can come back blank when the headless
+                    # browser hiccups, and a blank picture judged "unfulfilled" is a
+                    # wrong verdict with money attached. If the bytes cannot be had,
+                    # or the model reports seeing nothing, this raises: the settle
+                    # fails instead of sealing a guess, and can be retried.
+                    raw = b""
+                    try:
+                        raw = gl.nondet.web.get(url).body
+                    except Exception:
+                        raw = b""
+                    if len(raw) < 64:
+                        try:
+                            raw = gl.nondet.web.render(url, mode="screenshot").raw
+                        except Exception:
+                            raw = b""
+                    if len(raw) < 64:
+                        raise gl.vm.UserError("The jury could not load the image this time. Settle again in a minute.")
                     prompt = ("You are a neutral arbitrator deciding whether a delivered image meets an agreement.\n\n"
                               "THE AGREEMENT:\n" + terms + "\n\n"
                               "You are looking at the delivered image itself. Judge only what is visibly there. "
                               "Do not judge taste, quality or effort.\n\n"
                               "Respond with ONLY this JSON and nothing else. No preamble, no reasoning out loud, no code fence:\n"
                               '{"verdict": "fulfilled" or "unfulfilled", "reasoning": "at most 12 words naming what you actually see"}')
-                    out = gl.nondet.exec_prompt(prompt, images=[shot], response_format="json")
+                    out = gl.nondet.exec_prompt(prompt, images=[raw], response_format="json")
                     v, why = _read_verdict(out)
+                    low = (why or "").lower()
+                    if ("no image" in low or "not provided" in low or "cannot see" in low
+                            or "unable to view" in low or "can't see" in low):
+                        raise gl.vm.UserError("The jury could not see the image this time. Settle again in a minute.")
                     return {"verdict": v, "reasoning": why}
                 return look()
 
