@@ -2364,32 +2364,43 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   /* Every example describes what has to be INSIDE one file, because that is what the
      jury now reads: a single artifact, pinned to a commit, byte for byte. Terms that
      talk about a folder or a repository page no longer match how evidence is filed. */
-  /* Every template is written the way the jury actually reads: ONE file on GitHub,
-     pinned to a commit, and a numbered list of things that must be visibly inside it.
-     Each one also says exactly WHAT file the counterparty has to produce and how to
-     hand it in, because that is the question people actually ask. Each [PLACEHOLDER]
-     must be replaced; the form warns if one is left behind. */
+  /* Each template is three short lines. Line (1) has NO brackets: it is an easy
+     bar any honest delivery passes, so a quick test can end FULFILLED. Lines (2)+
+     hold the [PLACEHOLDERS]: fill them for a strict pact, or delete them for an
+     easy one. The third element is a hint shown under the box, not sent on-chain:
+     it says exactly which file to hand in. This keeps the reviewer's two demands
+     intact - the artifact is still one pinned file, the checks are still literal. */
   const TERMS_IDEAS=[
-    ["Design — logo (image file)",
-     "WHAT TO FILE: one image file, logo.png or logo.jpg, in a public GitHub repo. Open the image on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) the image is a graphic mark or wordmark, not a photograph and not a portrait of a person; (2) the text visible in the image reads exactly [BRAND NAME]; (3) the background is [PLAIN OR A COLOUR, e.g. plain white].\nNOTE: the jury looks at the picture and judges only what is visible, never whether the design is good."],
-    ["Design — social banner (image file)",
-     "WHAT TO FILE: one image file, banner.png or banner.jpg, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) the image is wider than it is tall; (2) it contains the headline text [HEADLINE] exactly; (3) it contains the name [BRAND NAME]; (4) no placeholder text such as Lorem ipsum is visible.\nNOTE: visible facts only; style and beauty are not grounds either way."],
-    ["Writing — an article (one .md file)",
-     "WHAT TO FILE: one Markdown or text file, article.md, in a public GitHub repo. Open the file on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit. Not a blog link, not a Google Doc: those can change after signing.\nPASS ONLY IF: (1) the first line is a title; (2) the body is about [TOPIC] and is at least [WORD COUNT, e.g. 800] words; (3) there are at least [NUMBER, e.g. 3] subheadings; (4) the text mentions [KEYWORDS, e.g. X, Y and Z] at least once each.\nNOTE: the jury counts and matches literally. A 790-word article fails an 800-word bar."],
-    ["Web — a website (its index.html)",
-     "WHAT TO FILE: the site's index.html in a public GitHub repo (one file, not the folder and not the live URL). Open index.html on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) the file contains a section or heading for each of: [SECTION NAMES, e.g. Home, Pricing, Contact]; (2) each of those sections has real text under it, not placeholder text; (3) the page title or header names [PRODUCT NAME].\nNOTE: the jury reads the HTML as text. It does not open the live site or load other files."],
-    ["Code — a function or class (one source file)",
-     "WHAT TO FILE: one source file, e.g. parser.py or utils.js, in a public GitHub repo. Open the file on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it defines [FUNCTION OR CLASS NAME]; (2) that code visibly handles [THE CASE IT MUST HANDLE, e.g. an empty input]; (3) it has a docstring or comment stating its inputs and output.\nNOTE: the jury reads code as text. It checks what is written, it does not run it."],
-    ["Code — the tests (one test file)",
-     "WHAT TO FILE: one test file, e.g. test_parser.py, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it contains at least [NUMBER, e.g. 5] separate test functions; (2) each is named test_ something; (3) together they exercise [WHAT IS BEING TESTED]; (4) at least one test covers the failure case [FAILURE CASE].\nNOTE: count is literal; four tests fail a bar of five."],
-    ["GenLayer — an Intelligent Contract (one .py file)",
-     "WHAT TO FILE: the contract file, e.g. contract.py, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it defines a class named [CONTRACT NAME] that inherits gl.Contract; (2) it has a public write method named [METHOD NAME]; (3) that method reaches consensus through [CONSENSUS METHOD, e.g. gl.eq_principle.strict_eq or a custom validator]; (4) every storage field uses a storage-safe type (no list or dict).\nNOTE: the jury checks the source text for these facts; it does not deploy or execute it."],
-    ["Docs — a setup guide (one .md file)",
-     "WHAT TO FILE: one Markdown file, SETUP.md, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it is a setup guide for [WHAT IT SETS UP]; (2) it has a prerequisites list; (3) it has numbered steps; (4) it has at least one code block; (5) it has a troubleshooting or FAQ section.\nNOTE: all five must be visibly present."],
-    ["Docs — a changelog entry (one file)",
-     "WHAT TO FILE: the CHANGELOG.md file in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it has an entry for a version number higher than [CURRENT VERSION]; (2) that entry names [FEATURE NAME]; (3) the entry carries a date.\nNOTE: version comparison is literal, e.g. 2.1.0 is above 2.0.9."],
-    ["Data — a dataset (one .csv file)",
-     "WHAT TO FILE: one CSV file, data.csv, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit. A plain CSV, not a spreadsheet file.\nPASS ONLY IF: (1) the header row contains the columns [COLUMN NAMES] in that order; (2) there are at least [NUMBER, e.g. 100] data rows after the header; (3) the column [KEY COLUMN] is non-empty in every one of the first 20 rows.\nNOTE: the jury reads the file as text and counts rows literally."]
+    ["Design — a logo (easy: any real logo passes)",
+     "Deliverable: one image file, the logo itself.\nFulfilled if:\n(1) the image is a logo: a graphic mark or wordmark, not a photograph and not a portrait of a person.\n(2) the text visible in the image reads exactly [BRAND NAME].",
+     "File to hand in: logo.png or logo.jpg in a public GitHub repo. The jury looks at the picture and judges what is visible, never taste. Line (1) alone is an easy pact any real logo passes. Fill [BRAND NAME] for a strict one, or delete line (2)."],
+    ["Design — a banner (easy: any real banner passes)",
+     "Deliverable: one image file, the banner itself.\nFulfilled if:\n(1) the image is a wide banner graphic, not a photograph of a person.\n(2) it contains the text [HEADLINE] exactly.",
+     "File to hand in: banner.png or banner.jpg in a public GitHub repo. Line (1) alone is an easy pact. Fill [HEADLINE] for a strict one, or delete line (2)."],
+    ["Writing — an article",
+     "Deliverable: one text or Markdown file containing the article.\nFulfilled if:\n(1) the file is a finished article: a title plus real prose, not placeholder text.\n(2) it is about [TOPIC] and is at least [WORD COUNT, e.g. 500] words.\n(3) it mentions [KEYWORDS, e.g. X and Y].",
+     "File to hand in: article.md or article.txt in a public GitHub repo. Not a blog link or Google Doc, those can change after signing. Line (1) alone is an easy pact. The jury counts literally: a 490-word article fails a 500-word bar."],
+    ["Web — a website's index.html",
+     "Deliverable: the site's index.html file.\nFulfilled if:\n(1) the file is a real HTML page with a title and visible text content, not a placeholder page.\n(2) it has a heading for each of: [SECTION NAMES, e.g. Home, Pricing, Contact].\n(3) its title or main header names [PRODUCT NAME].",
+     "File to hand in: the index.html file itself, in a public GitHub repo, not the folder and not the live site. The jury reads the HTML as text. Line (1) alone is an easy pact. IMPORTANT: for (2), write the section names the page will actually have."],
+    ["Code — a function or class",
+     "Deliverable: one source code file.\nFulfilled if:\n(1) the file is real source code, not placeholder text.\n(2) it defines [FUNCTION OR CLASS NAME].\n(3) that code visibly handles [THE CASE, e.g. an empty input].",
+     "File to hand in: one source file, e.g. parser.py, in a public GitHub repo. The jury reads code as text; it checks what is written, it does not run it. Line (1) alone is an easy pact."],
+    ["Code — the tests",
+     "Deliverable: one test file.\nFulfilled if:\n(1) the file contains automated test functions.\n(2) at least [NUMBER, e.g. 5] separate tests, each named test_ something.\n(3) at least one covers [FAILURE CASE, e.g. an empty input].",
+     "File to hand in: one test file, e.g. test_parser.py, in a public GitHub repo. Counts are literal: four tests fail a bar of five. Line (1) alone is an easy pact."],
+    ["GenLayer — an Intelligent Contract",
+     "Deliverable: one GenLayer Intelligent Contract source file.\nFulfilled if:\n(1) the file defines a class inheriting gl.Contract with at least one @gl.public method.\n(2) the class is named [CONTRACT NAME] and has a public write method named [METHOD NAME].",
+     "File to hand in: the contract .py file in a public GitHub repo. The jury checks the source text; it does not deploy it. Line (1) alone is an easy pact any real contract passes."],
+    ["Docs — a setup guide",
+     "Deliverable: one Markdown document.\nFulfilled if:\n(1) the file is a setup guide with numbered steps and at least one code block.\n(2) it is a guide for [WHAT IT SETS UP] and also has a prerequisites list and a troubleshooting section.",
+     "File to hand in: SETUP.md or README.md in a public GitHub repo. Line (1) alone is an easy pact most real guides pass."],
+    ["Docs — a changelog entry",
+     "Deliverable: the changelog file.\nFulfilled if:\n(1) the file is a changelog with dated version entries.\n(2) it has an entry for a version above [CURRENT VERSION, e.g. 1.0.0] that names [FEATURE NAME].",
+     "File to hand in: CHANGELOG.md in a public GitHub repo. Version comparison is literal: 1.1.0 is above 1.0.9. Line (1) alone is an easy pact."],
+    ["Data — a CSV dataset",
+     "Deliverable: one CSV data file.\nFulfilled if:\n(1) the file is a plain CSV: a header row followed by data rows.\n(2) the header contains the columns [COLUMN NAMES] in that order, and there are at least [NUMBER, e.g. 100] data rows.",
+     "File to hand in: data.csv in a public GitHub repo, a plain CSV and not a spreadsheet. Line (1) alone is an easy pact. Rows are counted literally."]
   ];
   function wireSuggest(btnId,listId,ideas,targetId,onPick){
     const list=$(listId), btn=$(btnId), labelClosed=btn.textContent;
@@ -2420,9 +2431,17 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     fit(); requestAnimationFrame(fit); setTimeout(fit,400);
   }
   { const t=$("f_terms"); if(t) t.addEventListener("input",autosizeTerms); }
-  wireSuggest("termsSuggestBtn","termsSuggestList",TERMS_IDEAS,"f_terms",(el)=>{
-    autosizeTerms(); el.focus(); el.select();
-    showToast("Now make it yours","This is a worked example. Replace the specific file names, numbers or sections with your actual deliverable \u2014 the jury checks these exact words.");
+  function showTermsHint(text){
+    let el=$("termsHint");
+    if(!el){ el=document.createElement("div"); el.id="termsHint"; el.className="tn-note";
+      el.style.cssText="background:rgba(111,60,255,.08);border-color:rgba(143,123,255,.3);margin-top:8px";
+      $("f_terms").parentNode.insertBefore(el,$("f_terms").nextSibling); }
+    el.textContent=text;
+  }
+  wireSuggest("termsSuggestBtn","termsSuggestList",TERMS_IDEAS,"f_terms",(el,pair)=>{
+    autosizeTerms(); el.focus();
+    if(pair && pair[2]) showTermsHint(pair[2]);
+    showToast("Line (1) is the easy bar","Keep only line (1) for a pact that any honest delivery passes. Fill the [BRACKETS] in the other lines for a strict one, or delete those lines.");
   });
 
   /* ---- live check on the evidence field: is this link actually pinned? ---- */
