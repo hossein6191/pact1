@@ -459,7 +459,9 @@
       <b>📎 Evidence is filed later, by the counterparty.</b> You are not choosing what the jury reads.
       After both of you sign, the counterparty files one <b>commit-pinned GitHub file</b> as their proof,
       from their own wallet, before the deadline. It can be a text file, which the jury reads, or an
-      image, which the jury renders and looks at. A commit hash fixes the exact bytes, so what the jury
+      image, which the jury renders and looks at. They will need the finished work as <b>one file in a public
+      GitHub repo</b>; the site turns their GitHub link into the pinned form for them, and each template above
+      tells them exactly which file to produce. A commit hash fixes the exact bytes, so what the jury
       reads cannot be swapped afterwards — by them or by you.<br />
       <span style="opacity:.85">You will be able to see exactly what they filed, and when, before the deadline closes.</span>
     </div>
@@ -527,17 +529,23 @@
       <dl id="statusGrid"></dl>
 
       <div class="hidden" id="evidencePanel">
-        <label for="f_ev">Your evidence · one commit-pinned GitHub file<span class="req">*</span></label>
-        <input id="f_ev" class="mono" placeholder="https://raw.githubusercontent.com/owner/repo/&lt;40-char commit&gt;/path" />
-        <div class="tn-note" id="evGuide">
-          <b>Why it has to be pinned.</b> A branch link like <span class="mono">/main/</span> points at whatever the branch
-          holds today, so its contents can change after the jury has ruled. A commit hash is a hash of the exact files,
-          so the bytes the jury reads are fixed forever and anyone can re-check them.<br />
-          <span style="opacity:.85">Paste any normal GitHub file link and press <b>Pin it for me</b> — it will look up the
-          current commit and convert the link for you.</span>
+        <div class="tn-note" id="evHow">
+          <b>How to hand in your evidence, step by step.</b><br />
+          <b>1.</b> Put the finished work in a <b>public GitHub repository</b>, as <b>one file</b>: an image (<code>.png</code> / <code>.jpg</code>), a document (<code>.md</code> / <code>.txt</code>), a page (<code>.html</code>), a data file (<code>.csv</code>) or a source file.<br />
+          <b>2.</b> Open that file on GitHub and copy the link from your browser's address bar. It looks like <code>github.com/you/repo/blob/main/logo.png</code>.<br />
+          <b>3.</b> Paste it below and press <b>Pin to commit</b>. That button converts your link into a <b>commit-pinned</b> one (a long hash instead of <code>main</code>): the only form the pact accepts, because a commit can never change afterwards. It also checks the link really serves a file.<br />
+          <b>4.</b> Press <b>File this as my evidence</b> and confirm in your wallet.<br />
+          <span style="opacity:.85"><b>Not accepted:</b> a folder, the repository home page, a live website, a blog post, a Google Doc, anything on X or Instagram. All of those can change after signing, which is the whole thing this prevents. If you paste a folder link, the site lists the files inside so you can pick one.</span>
+        </div>
+        <label for="f_ev">Your evidence · one file on GitHub<span class="req">*</span></label>
+        <input id="f_ev" class="mono" placeholder="https://github.com/you/repo/blob/main/your-file.png" />
+        <div class="tn-note" id="evGuide" style="opacity:.9">
+          <b>Why a commit and not a branch.</b> A branch link like <span class="mono">/main/</span> points at whatever the branch holds
+          today, so its contents could change after the jury ruled. A commit hash is a hash of the exact files, so the bytes the jury reads are
+          fixed forever and anyone can re-check them against the hash recorded on-chain.
         </div>
         <div class="btn-row">
-          <button class="btn-ghost" id="pinBtn">📌 Pin it for me</button>
+          <button class="btn-ghost" id="pinBtn">📌 Pin to commit (convert my link)</button>
           <button class="btn-primary" id="fileEvBtn">File this as my evidence</button>
         </div>
       </div>
@@ -1324,7 +1332,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     else if(m.includes("Only the obligated party"))setStatus(el,"\u2717 Only Party B, the side that owes the work, can file evidence. If you are Party A, this is theirs to do.");
     else if(m.includes("evidence is closed"))setStatus(el,"\u2717 The deadline has passed, so evidence can no longer be filed or changed. Settling now rules NOT FULFILLED and returns the escrow.");
     else if(m.includes("before evidence can be filed"))setStatus(el,"\u2717 Both parties have to sign before evidence can be filed.");
-    else if(m.includes("commit pinned")||m.includes("commit hash")||m.includes("file path"))setStatus(el,"\u2717 "+m.replace(/^.*?(Evidence has to be|The link|The third segment)/,"$1")+"\n\nPress \u201cPin it for me\u201d and the link is converted for you.");
+    else if(m.includes("commit pinned")||m.includes("commit hash")||m.includes("file path"))setStatus(el,"\u2717 "+m.replace(/^.*?(Evidence has to be|The link|The third segment)/,"$1")+"\n\nPress \u201cPin to commit\u201d and the link is converted for you.");
     else if(m.includes("Only the party who drafted"))setStatus(el,"\u2717 Only Party A, who created this pact, can add to its escrow.");
     else if(m.includes("greater than zero"))setStatus(el,"\u2717 The amount has to be more than zero.");
     else if(m.includes("insufficient")||m.includes("funds"))setStatus(el,"\u2717 Not enough test GEN for gas. Click \u201cGet test GEN\u201d next to your wallet address, then try again.");
@@ -2204,7 +2212,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     const bad=pinError(v);
     if(bad){
       el.style.borderColor="#ff9d8a";
-      setStatus($("actionStatus"),"✗ "+bad+"\n\nPress “Pin it for me” and this is done for you.");
+      setStatus($("actionStatus"),"✗ "+bad+"\n\nPress “Pin to commit” and the link is converted for you.");
       sFail(); return;
     }
     el.style.borderColor="";
@@ -2215,7 +2223,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     const chk=await checkRaw(v);
     if(!chk.ok){
       el.style.borderColor="#ff9d8a";
-      setStatus($("actionStatus"),"✗ That link does not serve a file (HTTP "+chk.status+"). It is probably a folder, or the file does not exist at that commit.\n\nThe jury opens exactly one file; pointing it at this would make it read nothing and rule NOT FULFILLED. Paste a link to the file itself and press “Pin it for me”.");
+      setStatus($("actionStatus"),"✗ That link does not serve a file (HTTP "+chk.status+"). It is probably a folder, or the file does not exist at that commit.\n\nThe jury opens exactly one file; pointing it at this would make it read nothing and rule NOT FULFILLED. Paste a link to the file itself and press “Pin to commit”.");
       sFail(); return;
     }
     $("actionStatus").classList.add("hidden");
@@ -2332,37 +2340,32 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   /* Every example describes what has to be INSIDE one file, because that is what the
      jury now reads: a single artifact, pinned to a commit, byte for byte. Terms that
      talk about a folder or a repository page no longer match how evidence is filed. */
-  /* Every template is written the way the jury actually reads: ONE pinned file,
-     a numbered list of things that must be visibly present in it, and a note on
-     what that wording costs. Each [PLACEHOLDER] must be replaced; the form warns
-     if one is left behind. */
+  /* Every template is written the way the jury actually reads: ONE file on GitHub,
+     pinned to a commit, and a numbered list of things that must be visibly inside it.
+     Each one also says exactly WHAT file the counterparty has to produce and how to
+     hand it in, because that is the question people actually ask. Each [PLACEHOLDER]
+     must be replaced; the form warns if one is left behind. */
   const TERMS_IDEAS=[
-    ["Design — logo delivery (image)",
-     "DELIVERABLE: one image file (PNG or JPG) filed as the pinned evidence.\nPASS ONLY IF: (1) the image is a graphic mark or wordmark, not a photograph and not a portrait of a person; (2) the text visible in the image reads exactly [BRAND NAME]; (3) the background is [PLAIN OR A COLOUR, e.g. plain white].\nNOTE: the jury looks at the picture and judges only what is visible. It never judges whether the design is good."],
-    ["Design — social banner (image)",
-     "DELIVERABLE: one image file filed as the pinned evidence.\nPASS ONLY IF: (1) the image is wider than it is tall; (2) it contains the headline text [HEADLINE] exactly; (3) it contains the name [BRAND NAME]; (4) no placeholder text such as Lorem ipsum is visible.\nNOTE: visible facts only; style and beauty are not grounds either way."],
-    ["Freelance — article",
-     "DELIVERABLE: one text or Markdown file filed as the pinned evidence.\nPASS ONLY IF: (1) the first line is a title; (2) the body is about [TOPIC] and is at least [WORD COUNT, e.g. 800] words; (3) there are at least [NUMBER, e.g. 3] subheadings; (4) the text mentions [KEYWORDS, e.g. X, Y and Z] at least once each.\nNOTE: the jury counts and matches literally. A 790-word article fails an 800-word bar."],
-    ["Freelance — website copy",
-     "DELIVERABLE: one file with the finished copy, filed as the pinned evidence.\nPASS ONLY IF: (1) it contains a heading for each of these sections: [SECTION NAMES, e.g. Home, Pricing, Contact]; (2) every section has at least one paragraph of real copy under it; (3) it contains a call to action that names [PRODUCT NAME].\nNOTE: headings present but empty do not count as copy."],
-    ["Code — ship a function or class",
-     "DELIVERABLE: one source file filed as the pinned evidence.\nPASS ONLY IF: (1) it defines [FUNCTION OR CLASS NAME]; (2) that code visibly handles [THE CASE IT MUST HANDLE, e.g. an empty input]; (3) it has a docstring or comment stating its inputs and output.\nNOTE: the jury reads code as text. It checks what is written, it does not run it."],
-    ["Code — the tests",
-     "DELIVERABLE: one test file filed as the pinned evidence.\nPASS ONLY IF: (1) it contains at least [NUMBER, e.g. 5] separate test functions; (2) each is named test_ something; (3) together they exercise [WHAT IS BEING TESTED]; (4) at least one test covers the failure case [FAILURE CASE].\nNOTE: count is literal; four tests fail a bar of five."],
-    ["GenLayer — an Intelligent Contract",
-     "DELIVERABLE: one Python contract file filed as the pinned evidence.\nPASS ONLY IF: (1) it defines a class named [CONTRACT NAME] that inherits gl.Contract; (2) it has a public write method named [METHOD NAME]; (3) that method reaches consensus through [CONSENSUS METHOD, e.g. gl.eq_principle.strict_eq or a custom validator]; (4) every storage field uses a storage-safe type (no list or dict).\nNOTE: the jury checks the source text for these facts; it does not deploy or execute it."],
-    ["Docs — setup guide",
-     "DELIVERABLE: one document filed as the pinned evidence.\nPASS ONLY IF: (1) it is a setup guide for [WHAT IT SETS UP]; (2) it has a prerequisites list; (3) it has numbered steps; (4) it has at least one code block; (5) it has a troubleshooting or FAQ section.\nNOTE: all five must be visibly present."],
-    ["Docs — changelog entry",
-     "DELIVERABLE: one changelog file filed as the pinned evidence.\nPASS ONLY IF: (1) it has an entry for a version number higher than [CURRENT VERSION]; (2) that entry names [FEATURE NAME]; (3) the entry carries a date.\nNOTE: version comparison is literal, e.g. 2.1.0 is above 2.0.9."],
-    ["Data — a dataset (CSV)",
-     "DELIVERABLE: one CSV file filed as the pinned evidence.\nPASS ONLY IF: (1) the header row contains the columns [COLUMN NAMES] in that order; (2) there are at least [NUMBER, e.g. 100] data rows after the header; (3) the column [KEY COLUMN] is non-empty in every one of the first 20 rows.\nNOTE: the jury reads the file as text, so keep it a plain CSV, not a spreadsheet."],
-    ["Translation — a full translation",
-     "DELIVERABLE: one text file filed as the pinned evidence.\nPASS ONLY IF: (1) it is written in [TARGET LANGUAGE]; (2) it has the same [NUMBER] section headings as the original, in the same order; (3) no paragraph is left in [SOURCE LANGUAGE].\nNOTE: the jury can tell languages apart and count sections; it does not grade translation quality."],
-    ["Research — a sourced summary",
-     "DELIVERABLE: one document filed as the pinned evidence.\nPASS ONLY IF: (1) it summarises [SUBJECT]; (2) it names at least [NUMBER, e.g. 3] distinct sources, each with a title or URL; (3) it ends with a clearly labelled conclusion; (4) it is at least [WORD COUNT, e.g. 400] words.\nNOTE: sources must be named in the file itself; the jury will not follow links out of it."],
-    ["Bet — a public prediction",
-     "DELIVERABLE: one text file filed as the pinned evidence, quoting the public source.\nPASS ONLY IF: (1) the file quotes [PUBLIC SOURCE, e.g. the official results page] verbatim; (2) the quoted text states that [PREDICTED OUTCOME] happened; (3) the quote carries the date [DATE].\nNOTE: the jury judges the filed file, so the quote must be in it; file it before the deadline."]
+    ["Design — logo (image file)",
+     "WHAT TO FILE: one image file, logo.png or logo.jpg, in a public GitHub repo. Open the image on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) the image is a graphic mark or wordmark, not a photograph and not a portrait of a person; (2) the text visible in the image reads exactly [BRAND NAME]; (3) the background is [PLAIN OR A COLOUR, e.g. plain white].\nNOTE: the jury looks at the picture and judges only what is visible, never whether the design is good."],
+    ["Design — social banner (image file)",
+     "WHAT TO FILE: one image file, banner.png or banner.jpg, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) the image is wider than it is tall; (2) it contains the headline text [HEADLINE] exactly; (3) it contains the name [BRAND NAME]; (4) no placeholder text such as Lorem ipsum is visible.\nNOTE: visible facts only; style and beauty are not grounds either way."],
+    ["Writing — an article (one .md file)",
+     "WHAT TO FILE: one Markdown or text file, article.md, in a public GitHub repo. Open the file on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit. Not a blog link, not a Google Doc: those can change after signing.\nPASS ONLY IF: (1) the first line is a title; (2) the body is about [TOPIC] and is at least [WORD COUNT, e.g. 800] words; (3) there are at least [NUMBER, e.g. 3] subheadings; (4) the text mentions [KEYWORDS, e.g. X, Y and Z] at least once each.\nNOTE: the jury counts and matches literally. A 790-word article fails an 800-word bar."],
+    ["Web — a website (its index.html)",
+     "WHAT TO FILE: the site's index.html in a public GitHub repo (one file, not the folder and not the live URL). Open index.html on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) the file contains a section or heading for each of: [SECTION NAMES, e.g. Home, Pricing, Contact]; (2) each of those sections has real text under it, not placeholder text; (3) the page title or header names [PRODUCT NAME].\nNOTE: the jury reads the HTML as text. It does not open the live site or load other files."],
+    ["Code — a function or class (one source file)",
+     "WHAT TO FILE: one source file, e.g. parser.py or utils.js, in a public GitHub repo. Open the file on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it defines [FUNCTION OR CLASS NAME]; (2) that code visibly handles [THE CASE IT MUST HANDLE, e.g. an empty input]; (3) it has a docstring or comment stating its inputs and output.\nNOTE: the jury reads code as text. It checks what is written, it does not run it."],
+    ["Code — the tests (one test file)",
+     "WHAT TO FILE: one test file, e.g. test_parser.py, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it contains at least [NUMBER, e.g. 5] separate test functions; (2) each is named test_ something; (3) together they exercise [WHAT IS BEING TESTED]; (4) at least one test covers the failure case [FAILURE CASE].\nNOTE: count is literal; four tests fail a bar of five."],
+    ["GenLayer — an Intelligent Contract (one .py file)",
+     "WHAT TO FILE: the contract file, e.g. contract.py, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it defines a class named [CONTRACT NAME] that inherits gl.Contract; (2) it has a public write method named [METHOD NAME]; (3) that method reaches consensus through [CONSENSUS METHOD, e.g. gl.eq_principle.strict_eq or a custom validator]; (4) every storage field uses a storage-safe type (no list or dict).\nNOTE: the jury checks the source text for these facts; it does not deploy or execute it."],
+    ["Docs — a setup guide (one .md file)",
+     "WHAT TO FILE: one Markdown file, SETUP.md, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it is a setup guide for [WHAT IT SETS UP]; (2) it has a prerequisites list; (3) it has numbered steps; (4) it has at least one code block; (5) it has a troubleshooting or FAQ section.\nNOTE: all five must be visibly present."],
+    ["Docs — a changelog entry (one file)",
+     "WHAT TO FILE: the CHANGELOG.md file in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit.\nPASS ONLY IF: (1) it has an entry for a version number higher than [CURRENT VERSION]; (2) that entry names [FEATURE NAME]; (3) the entry carries a date.\nNOTE: version comparison is literal, e.g. 2.1.0 is above 2.0.9."],
+    ["Data — a dataset (one .csv file)",
+     "WHAT TO FILE: one CSV file, data.csv, in a public GitHub repo. Open it on GitHub, copy the link from the address bar, paste it under Evidence and press Pin to commit. A plain CSV, not a spreadsheet file.\nPASS ONLY IF: (1) the header row contains the columns [COLUMN NAMES] in that order; (2) there are at least [NUMBER, e.g. 100] data rows after the header; (3) the column [KEY COLUMN] is non-empty in every one of the first 20 rows.\nNOTE: the jury reads the file as text and counts rows literally."]
   ];
   function wireSuggest(btnId,listId,ideas,targetId,onPick){
     const list=$(listId), btn=$(btnId), labelClosed=btn.textContent;
@@ -2414,7 +2417,7 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       const v=el.value.trim();
       if(!v){ if(note){note.remove();note=null;} el.style.borderColor=""; return; }
       const bad=pinError(v);
-      if(bad) show("<b>\u26A0 Not pinned yet.</b> "+bad+" Press <b>Pin it for me</b> and this is handled for you.",true);
+      if(bad) show("<b>\u26A0 Not pinned yet.</b> "+bad+" Press <b>Pin to commit</b> and the link is converted for you.",true);
       else show("<b>\u2713 Pinned.</b> This names one exact commit, so the bytes the jury reads are fixed and anyone can re-check them against the hash recorded on-chain.",false);
     });
   })();
