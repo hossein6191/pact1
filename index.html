@@ -420,7 +420,10 @@
       Text files are read as text, so “a file named logo.svg exists” is no longer a thing to write: name what must be
       <i>inside</i> the file.</span>
     </div>
-    <button type="button" class="suggest-btn" id="termsSuggestBtn">Need ideas? Pick a ready-made agreement ▾</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button type="button" class="suggest-btn" id="genBtn" style="border-color:rgba(143,123,255,.5)">✨ Generate an agreement…</button>
+      <button type="button" class="suggest-btn" id="termsSuggestBtn">Need ideas? Pick a ready-made agreement ▾</button>
+    </div>
     <div class="suggest-list hidden" id="termsSuggestList"></div>
 
     <label for="f_partyb">Counterparty wallet address<span class="req">*</span></label>
@@ -1260,6 +1263,43 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       field.focus(); field.select();
     });
   }
+  /* Pick a kind of work and how hard the bar should be, in one dialog. The three
+     levels are real text, not a model call: what goes on-chain has to be something
+     the person read and agreed to, and a generated sentence nobody checked is how
+     you end up with a deadline judging words you never meant. */
+  function askTemplate(){
+    return new Promise(function(resolve){
+      var back=document.createElement("div");
+      back.className="paper-back";
+      var opts=TERMS_IDEAS.map(function(t,i){ return '<option value="'+i+'">'+t.label+'</option>'; }).join("");
+      back.innerHTML='<div class="modal-box" role="dialog" aria-modal="true" style="max-width:560px">'+
+        '<h3>Generate an agreement</h3>'+
+        '<div style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:14px">Pick the kind of work, then how strict the jury should be. You can edit every word afterwards.</div>'+
+        '<label class="muted" style="font-size:12.5px">Kind of work</label>'+
+        '<select data-a="cat" style="width:100%;margin:6px 0 16px">'+opts+'</select>'+
+        '<div style="display:grid;gap:8px">'+
+          '<button class="gotit" data-a="easy" style="text-align:left;padding:12px 14px"><b>Easy</b> · one plain check, no blanks to fill<br /><span style="opacity:.75;font-weight:400;font-size:12.5px">Any honest delivery of this kind passes. Best for a first run.</span></button>'+
+          '<button class="btn-ghost" data-a="medium" style="text-align:left;padding:12px 14px"><b>Medium</b> · adds one specific requirement<br /><span style="opacity:.75;font-size:12.5px">You fill in one blank, such as a name or a number.</span></button>'+
+          '<button class="btn-ghost" data-a="strict" style="text-align:left;padding:12px 14px"><b>Strict</b> · every detail spelled out<br /><span style="opacity:.75;font-size:12.5px">Two or three blanks to fill. Nothing vague survives it.</span></button>'+
+        '</div>'+
+        '<button class="btn-ghost" data-a="cancel" style="width:100%;margin-top:14px">Cancel</button>'+
+        '</div>';
+      var sel=back.querySelector('[data-a="cat"]');
+      function done(v){ if(back.parentNode) back.remove(); document.removeEventListener("keydown",onKey); resolve(v); }
+      function onKey(e){ if(e.key==="Escape") done(null); }
+      back.addEventListener("click",function(e){
+        var el=e.target && e.target.closest ? e.target.closest("[data-a]") : null;
+        var a=el && el.getAttribute("data-a");
+        if(a==="easy"||a==="medium"||a==="strict") done({idx:parseInt(sel.value,10), level:a});
+        else if(a==="cancel") done(null);
+        else if(e.target===back) done(null);
+      });
+      document.addEventListener("keydown",onKey);
+      document.body.appendChild(back);
+      sel.focus();
+    });
+  }
+
   function askConfirm(title, body, okLabel, cancelLabel){
     return new Promise(function(resolve){
       var back=document.createElement("div");
@@ -2364,44 +2404,69 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
   /* Every example describes what has to be INSIDE one file, because that is what the
      jury now reads: a single artifact, pinned to a commit, byte for byte. Terms that
      talk about a folder or a repository page no longer match how evidence is filed. */
-  /* Each template is three short lines. Line (1) has NO brackets: it is an easy
-     bar any honest delivery passes, so a quick test can end FULFILLED. Lines (2)+
-     hold the [PLACEHOLDERS]: fill them for a strict pact, or delete them for an
-     easy one. The third element is a hint shown under the box, not sent on-chain:
-     it says exactly which file to hand in. This keeps the reviewer's two demands
-     intact - the artifact is still one pinned file, the checks are still literal. */
+  /* Three graded versions of every agreement. EASY has no brackets at all: an
+     honest delivery of the right kind passes it, which is what makes a first test
+     end FULFILLED instead of teaching people that the jury always says no. MEDIUM
+     adds one concrete, fillable check. STRICT adds the rest. Nothing here loosens
+     what the reviewer asked for: still one commit-pinned file, still literal checks,
+     still an escrow that the verdict moves. What changes is that the person writing
+     the deal can choose how hard it is, instead of being handed a form full of
+     brackets they did not know they had to replace. */
   const TERMS_IDEAS=[
-    ["Design — a logo (easy: any real logo passes)",
-     "Deliverable: one image file, the logo itself.\nFulfilled if:\n(1) the image is a logo: a graphic mark or wordmark, not a photograph and not a portrait of a person.\n(2) the text visible in the image reads exactly [BRAND NAME].",
-     "File to hand in: logo.png or logo.jpg in a public GitHub repo. The jury looks at the picture and judges what is visible, never taste. Line (1) alone is an easy pact any real logo passes. Fill [BRAND NAME] for a strict one, or delete line (2)."],
-    ["Design — a banner (easy: any real banner passes)",
-     "Deliverable: one image file, the banner itself.\nFulfilled if:\n(1) the image is a wide banner graphic, not a photograph of a person.\n(2) it contains the text [HEADLINE] exactly.",
-     "File to hand in: banner.png or banner.jpg in a public GitHub repo. Line (1) alone is an easy pact. Fill [HEADLINE] for a strict one, or delete line (2)."],
-    ["Writing — an article",
-     "Deliverable: one text or Markdown file containing the article.\nFulfilled if:\n(1) the file is a finished article: a title plus real prose, not placeholder text.\n(2) it is about [TOPIC] and is at least [WORD COUNT, e.g. 500] words.\n(3) it mentions [KEYWORDS, e.g. X and Y].",
-     "File to hand in: article.md or article.txt in a public GitHub repo. Not a blog link or Google Doc, those can change after signing. Line (1) alone is an easy pact. The jury counts literally: a 490-word article fails a 500-word bar."],
-    ["Web — a website's index.html",
-     "Deliverable: the site's index.html file.\nFulfilled if:\n(1) the file is a real HTML page with a title and visible text content, not a placeholder page.\n(2) it has a heading for each of: [SECTION NAMES, e.g. Home, Pricing, Contact].\n(3) its title or main header names [PRODUCT NAME].",
-     "File to hand in: the index.html file itself, in a public GitHub repo, not the folder and not the live site. The jury reads the HTML as text. Line (1) alone is an easy pact. IMPORTANT: for (2), write the section names the page will actually have."],
-    ["Code — a function or class",
-     "Deliverable: one source code file.\nFulfilled if:\n(1) the file is real source code, not placeholder text.\n(2) it defines [FUNCTION OR CLASS NAME].\n(3) that code visibly handles [THE CASE, e.g. an empty input].",
-     "File to hand in: one source file, e.g. parser.py, in a public GitHub repo. The jury reads code as text; it checks what is written, it does not run it. Line (1) alone is an easy pact."],
-    ["Code — the tests",
-     "Deliverable: one test file.\nFulfilled if:\n(1) the file contains automated test functions.\n(2) at least [NUMBER, e.g. 5] separate tests, each named test_ something.\n(3) at least one covers [FAILURE CASE, e.g. an empty input].",
-     "File to hand in: one test file, e.g. test_parser.py, in a public GitHub repo. Counts are literal: four tests fail a bar of five. Line (1) alone is an easy pact."],
-    ["GenLayer — an Intelligent Contract",
-     "Deliverable: one GenLayer Intelligent Contract source file.\nFulfilled if:\n(1) the file defines a class inheriting gl.Contract with at least one @gl.public method.\n(2) the class is named [CONTRACT NAME] and has a public write method named [METHOD NAME].",
-     "File to hand in: the contract .py file in a public GitHub repo. The jury checks the source text; it does not deploy it. Line (1) alone is an easy pact any real contract passes."],
-    ["Docs — a setup guide",
-     "Deliverable: one Markdown document.\nFulfilled if:\n(1) the file is a setup guide with numbered steps and at least one code block.\n(2) it is a guide for [WHAT IT SETS UP] and also has a prerequisites list and a troubleshooting section.",
-     "File to hand in: SETUP.md or README.md in a public GitHub repo. Line (1) alone is an easy pact most real guides pass."],
-    ["Docs — a changelog entry",
-     "Deliverable: the changelog file.\nFulfilled if:\n(1) the file is a changelog with dated version entries.\n(2) it has an entry for a version above [CURRENT VERSION, e.g. 1.0.0] that names [FEATURE NAME].",
-     "File to hand in: CHANGELOG.md in a public GitHub repo. Version comparison is literal: 1.1.0 is above 1.0.9. Line (1) alone is an easy pact."],
-    ["Data — a CSV dataset",
-     "Deliverable: one CSV data file.\nFulfilled if:\n(1) the file is a plain CSV: a header row followed by data rows.\n(2) the header contains the columns [COLUMN NAMES] in that order, and there are at least [NUMBER, e.g. 100] data rows.",
-     "File to hand in: data.csv in a public GitHub repo, a plain CSV and not a spreadsheet. Line (1) alone is an easy pact. Rows are counted literally."]
+    {label:"Design — a logo",
+     easy:"Deliverable: one image file, the logo itself.\nFulfilled if:\n(1) the image is a logo: a graphic mark or wordmark, not a photograph and not a portrait of a person.",
+     medium:"Deliverable: one image file, the logo itself.\nFulfilled if:\n(1) the image is a logo: a graphic mark or wordmark, not a photograph and not a portrait of a person.\n(2) the text visible in the image reads exactly [BRAND NAME].",
+     strict:"Deliverable: one image file, the logo itself.\nFulfilled if:\n(1) the image is a logo: a graphic mark or wordmark, not a photograph and not a portrait of a person.\n(2) the text visible in the image reads exactly [BRAND NAME].\n(3) the background is [BACKGROUND, e.g. plain white], with no photographic scenery.",
+     hint:"File to hand in: logo.png or logo.jpg in a public GitHub repo. The jury renders the image and judges what is visible, never taste."},
+    {label:"Design — a banner",
+     easy:"Deliverable: one image file, the banner itself.\nFulfilled if:\n(1) the image is a wide banner graphic with visible text on it, not a photograph of a person.",
+     medium:"Deliverable: one image file, the banner itself.\nFulfilled if:\n(1) the image is a wide banner graphic with visible text on it, not a photograph of a person.\n(2) it contains the headline [HEADLINE] exactly.",
+     strict:"Deliverable: one image file, the banner itself.\nFulfilled if:\n(1) the image is a wide banner graphic with visible text on it, not a photograph of a person.\n(2) it contains the headline [HEADLINE] exactly.\n(3) it also shows the name [BRAND NAME], and no placeholder text such as Lorem ipsum.",
+     hint:"File to hand in: banner.png or banner.jpg in a public GitHub repo. The jury renders the image and reads the text in it."},
+    {label:"Writing — an article",
+     easy:"Deliverable: one text or Markdown file containing the article.\nFulfilled if:\n(1) the file is a finished article: a title line followed by real prose, not notes or placeholder text.",
+     medium:"Deliverable: one text or Markdown file containing the article.\nFulfilled if:\n(1) the file is a finished article: a title line followed by real prose, not notes or placeholder text.\n(2) it is about [TOPIC] and is at least [WORD COUNT, e.g. 500] words.",
+     strict:"Deliverable: one text or Markdown file containing the article.\nFulfilled if:\n(1) the file is a finished article: a title line followed by real prose, not notes or placeholder text.\n(2) it is about [TOPIC] and is at least [WORD COUNT, e.g. 500] words.\n(3) it has at least [NUMBER, e.g. 3] subheadings and mentions [KEYWORDS, e.g. X and Y].",
+     hint:"File to hand in: article.md or article.txt in a public GitHub repo. Not a blog link or a Google Doc, those can change after signing. Counts are literal: a 490-word article fails a 500-word bar."},
+    {label:"Web — a website's index.html",
+     easy:"Deliverable: the site's index.html file.\nFulfilled if:\n(1) the file is a real HTML page with a title and visible text content, not a placeholder page.",
+     medium:"Deliverable: the site's index.html file.\nFulfilled if:\n(1) the file is a real HTML page with a title and visible text content, not a placeholder page.\n(2) its title or main header names [PRODUCT NAME].",
+     strict:"Deliverable: the site's index.html file.\nFulfilled if:\n(1) the file is a real HTML page with a title and visible text content, not a placeholder page.\n(2) its title or main header names [PRODUCT NAME].\n(3) it has a heading for each of [SECTION NAMES, e.g. Home, Pricing, Contact], each with real text under it.",
+     hint:"File to hand in: the index.html file itself, not the folder and not the live site. The jury reads the HTML as text. For the strict version, write the section names the page will actually have."},
+    {label:"Code — a function or class",
+     easy:"Deliverable: one source code file.\nFulfilled if:\n(1) the file is real, working-looking source code, not a stub or placeholder text.",
+     medium:"Deliverable: one source code file.\nFulfilled if:\n(1) the file is real, working-looking source code, not a stub or placeholder text.\n(2) it defines [FUNCTION OR CLASS NAME].",
+     strict:"Deliverable: one source code file.\nFulfilled if:\n(1) the file is real, working-looking source code, not a stub or placeholder text.\n(2) it defines [FUNCTION OR CLASS NAME].\n(3) that code visibly handles [THE CASE, e.g. an empty input] and carries a docstring or comment describing its inputs and output.",
+     hint:"File to hand in: one source file, e.g. parser.py, in a public GitHub repo. The jury reads code as text; it checks what is written, it does not run it."},
+    {label:"Code — the tests",
+     easy:"Deliverable: one test file.\nFulfilled if:\n(1) the file contains automated test functions, not empty stubs.",
+     medium:"Deliverable: one test file.\nFulfilled if:\n(1) the file contains automated test functions, not empty stubs.\n(2) there are at least [NUMBER, e.g. 5] separate tests.",
+     strict:"Deliverable: one test file.\nFulfilled if:\n(1) the file contains automated test functions, not empty stubs.\n(2) there are at least [NUMBER, e.g. 5] separate tests.\n(3) they cover [WHAT IS BEING TESTED], and at least one covers [FAILURE CASE, e.g. an empty input].",
+     hint:"File to hand in: one test file, e.g. test_parser.py, in a public GitHub repo. Counts are literal: four tests fail a bar of five."},
+    {label:"GenLayer — an Intelligent Contract",
+     easy:"Deliverable: one GenLayer Intelligent Contract source file.\nFulfilled if:\n(1) the file defines a class inheriting gl.Contract, with at least one public method.",
+     medium:"Deliverable: one GenLayer Intelligent Contract source file.\nFulfilled if:\n(1) the file defines a class inheriting gl.Contract, with at least one public method.\n(2) the class is named [CONTRACT NAME] and has a public write method named [METHOD NAME].",
+     strict:"Deliverable: one GenLayer Intelligent Contract source file.\nFulfilled if:\n(1) the file defines a class inheriting gl.Contract, with at least one public method.\n(2) the class is named [CONTRACT NAME] and has a public write method named [METHOD NAME].\n(3) that method reaches consensus through [CONSENSUS, e.g. gl.eq_principle.strict_eq or a custom validator], and no storage field uses a plain list or dict.",
+     hint:"File to hand in: the contract .py file in a public GitHub repo. The jury checks the source text; it does not deploy or run it."},
+    {label:"Docs — a setup guide",
+     easy:"Deliverable: one Markdown document.\nFulfilled if:\n(1) the file is a setup guide with numbered steps and at least one code block.",
+     medium:"Deliverable: one Markdown document.\nFulfilled if:\n(1) the file is a setup guide with numbered steps and at least one code block.\n(2) it is a guide for [WHAT IT SETS UP].",
+     strict:"Deliverable: one Markdown document.\nFulfilled if:\n(1) the file is a setup guide with numbered steps and at least one code block.\n(2) it is a guide for [WHAT IT SETS UP].\n(3) it also has a prerequisites list and a troubleshooting or FAQ section.",
+     hint:"File to hand in: SETUP.md or README.md in a public GitHub repo."},
+    {label:"Docs — a changelog entry",
+     easy:"Deliverable: the changelog file.\nFulfilled if:\n(1) the file is a changelog listing version entries with dates.",
+     medium:"Deliverable: the changelog file.\nFulfilled if:\n(1) the file is a changelog listing version entries with dates.\n(2) it has an entry for a version above [CURRENT VERSION, e.g. 1.0.0].",
+     strict:"Deliverable: the changelog file.\nFulfilled if:\n(1) the file is a changelog listing version entries with dates.\n(2) it has an entry for a version above [CURRENT VERSION, e.g. 1.0.0].\n(3) that entry names [FEATURE NAME] and carries a date.",
+     hint:"File to hand in: CHANGELOG.md in a public GitHub repo. Version comparison is literal: 1.1.0 is above 1.0.9."},
+    {label:"Data — a CSV dataset",
+     easy:"Deliverable: one CSV data file.\nFulfilled if:\n(1) the file is a plain CSV: a header row followed by data rows.",
+     medium:"Deliverable: one CSV data file.\nFulfilled if:\n(1) the file is a plain CSV: a header row followed by data rows.\n(2) there are at least [NUMBER, e.g. 100] data rows after the header.",
+     strict:"Deliverable: one CSV data file.\nFulfilled if:\n(1) the file is a plain CSV: a header row followed by data rows.\n(2) there are at least [NUMBER, e.g. 100] data rows after the header.\n(3) the header contains the columns [COLUMN NAMES] in that order, and [KEY COLUMN] is non-empty in every row.",
+     hint:"File to hand in: data.csv in a public GitHub repo, a plain CSV and not a spreadsheet. Rows are counted literally."}
   ];
+  /* the ready-made list hands over the EASY version: it is the one that cannot be
+     accidentally shipped with brackets still in it */
+  const TERMS_SUGGEST = TERMS_IDEAS.map(t=>[t.label, t.easy, t.hint]);
   function wireSuggest(btnId,listId,ideas,targetId,onPick){
     const list=$(listId), btn=$(btnId), labelClosed=btn.textContent;
     ideas.forEach(pair=>{
@@ -2438,10 +2503,24 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       $("f_terms").parentNode.insertBefore(el,$("f_terms").nextSibling); }
     el.textContent=text;
   }
-  wireSuggest("termsSuggestBtn","termsSuggestList",TERMS_IDEAS,"f_terms",(el,pair)=>{
+  wireSuggest("termsSuggestBtn","termsSuggestList",TERMS_SUGGEST,"f_terms",(el,pair)=>{
     autosizeTerms(); el.focus();
     if(pair && pair[2]) showTermsHint(pair[2]);
-    showToast("Line (1) is the easy bar","Keep only line (1) for a pact that any honest delivery passes. Fill the [BRACKETS] in the other lines for a strict one, or delete those lines.");
+    showToast("That is the easy version","Any honest delivery of this kind passes it. Press Generate an agreement if you want a stricter one.");
+  });
+
+  $("genBtn").addEventListener("click",async()=>{
+    const pick=await askTemplate();
+    if(!pick) return;
+    const t=TERMS_IDEAS[pick.idx];
+    const el=$("f_terms");
+    el.value=t[pick.level];
+    el.dispatchEvent(new Event("input",{bubbles:true}));
+    autosizeTerms(); el.focus();
+    showTermsHint(t.hint);
+    const blanks=(el.value.match(/\[[A-Z][^\]]*\]/g)||[]).length;
+    if(blanks) showToast(blanks+" blank"+(blanks>1?"s":"")+" to fill","Replace every [BRACKETED] part with the real name, number or section. The jury looks for those words literally.");
+    else showToast("Ready to sign","No blanks to fill. Any honest delivery of this kind passes.");
   });
 
   /* ---- live check on the evidence field: is this link actually pinned? ---- */
