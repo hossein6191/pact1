@@ -1381,6 +1381,57 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
     }
     return false;
   }
+  /* A settle can finalize without deciding anything. GenLayer finalizes whatever the
+     validators voted, and when no majority forms the state change is rolled back and the
+     pact is left exactly as it was: not settled, escrow untouched, safe to try again.
+     That is not an error and not a fault of this page. It is the jury honestly failing
+     to agree, which on a borderline piece of evidence is the correct answer rather than
+     a broken one. The page used to sit on "deliberating" forever whenever it happened,
+     because it only ever watched the contract state, and a rolled back settle never
+     changes the state it was watching. So read the tally instead. */
+  async function consensusOf(txHash){
+    try{
+      const r=await fetch(RPC_URL,{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({jsonrpc:"2.0",id:1,method:"eth_getTransactionByHash",params:[txHash]})});
+      const j=await r.json();
+      const t=j&&j.result; if(!t) return null;
+      const votes=(t.consensus_data&&t.consensus_data.votes)||null;
+      if(!votes) return null;
+      let agree=0,disagree=0,idle=0,total=0;
+      for(const k in votes){
+        total++; const v=String(votes[k]);
+        if(v==="agree") agree++; else if(v==="disagree") disagree++; else idle++;
+      }
+      /* An idle validator never answered; a disagreeing one did the work and came back
+         with a different answer. Only a real majority of agreement applies the change. */
+      return {status:String(t.status||""),agree,disagree,idle,total,
+              decided: total>0 && agree*2>total,
+              split: total>0 && agree*2<=total};
+    }catch(e){ return null; }
+  }
+  function showSplitJury(c,txHash){
+    var w=document.createElement("div"); w.className="modal-wrap";
+    w.innerHTML='<div class="modal-card">'+
+      '<h3 style="margin:0 0 6px">The jury split \u2014 no verdict</h3>'+
+      '<p style="margin:0 0 12px;line-height:1.7;color:var(--dim)">Each validator looked at your evidence '+
+      'on its own, and they did not reach a majority: <b>'+c.agree+' agreed, '+c.disagree+' disagreed'+
+      (c.idle?', '+c.idle+' never answered':'')+'</b>. When that happens GenLayer applies nothing, '+
+      'so <b>this pact is still open and every coin in escrow is still in the contract</b>. '+
+      'Nothing was decided and nothing was paid.</p>'+
+      '<p style="margin:0 0 12px;line-height:1.7;color:var(--dim)">This is the contract working as intended '+
+      'rather than a failure: a verdict with money attached is only issued when independent validators '+
+      'reach the same one. Evidence that is genuinely borderline \u2014 a picture that only half of them '+
+      'would call a logo, a clause that can be read two ways \u2014 is exactly what makes them split.</p>'+
+      '<p style="margin:0 0 4px;line-height:1.7;color:var(--dim)">You can press <b>Settle</b> again: it '+
+      'costs nothing but gas and often lands on a majority the second time. If it keeps splitting, the '+
+      'agreement is asking for a judgement call rather than something checkable \u2014 sharpen the terms, '+
+      'or file evidence that names the requirement outright.</p>'+
+      (txHash?'<div style="margin-top:12px;font-size:12px">'+exLink(txHash)+'</div>':'')+
+      '<button class="gotit" style="margin-top:18px" id="splitClose">Got it</button></div>';
+    document.body.appendChild(w);
+    document.getElementById("splitClose").onclick=function(){ w.remove(); };
+    w.addEventListener("click",function(e){ if(e.target===w) w.remove(); });
+  }
   function handleTxError(err,target){
     var m=err&&err.message||String(err);
     var el=$(target);
@@ -2360,6 +2411,20 @@ Your output must be only JSON, with no prefix, suffix or code fence, and must pa
       setStatus($("actionStatus"),"\u2713 "+labels.ok+"\n"+exLink(txHash));
       await loadStatus(true);
     }else{
+      /* Before blaming the network, ask what the validators actually voted. A split
+         jury looks identical to a slow one from the state alone, and telling someone
+         to "keep waiting" for a transaction that already finished and decided nothing
+         is the worst of the two answers. */
+      const c = txHash ? await consensusOf(txHash) : null;
+      if(c && c.split && (c.status==="FINALIZED"||c.status==="ACCEPTED")){
+        clearTracker("actionTx");
+        setStatus($("actionStatus"),"\u2696 The jury split "+c.agree+"\u2013"+c.disagree+
+          " and no verdict was reached. Nothing was decided, nothing was paid, and the escrow is untouched. You can settle again.\n"+
+          (txHash?exLink(txHash):""),false);
+        showSplitJury(c,txHash);
+        await loadStatus(true);
+        return;
+      }
       showTracker("actionTx","Still working \u00b7 the testnet may be slow or timing out",txHash||"");
       setStatus($("actionStatus"),"\u23F3 This is taking longer than usual. The transaction may still land, or the testnet may have timed out.\nThe page keeps checking automatically and will update the moment it does. You can also try the same action again in a minute.\n"+(txHash?exLink(txHash):"")+"\n\n"+tnNote(),false);
       startAuto();
