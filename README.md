@@ -64,14 +64,22 @@ A pact can still be created with an escrow of `0`. The jury still reads and stil
 
 ## See the jury actually rule
 
-These two pacts are real, live on the chain, and settled by validators that had to agree. Open the site and press either demo button, or open the settle transactions directly. No wallet needed to look.
+These two pacts are real, live on the chain, signed by both parties from their own wallets, and settled by validators that had to agree. Open the site and press either demo button, or open the settle transactions directly. No wallet needed to look.
 
-| Verdict | Pact contract | The jury ruling |
-|---|---|---|
-| **FULFILLED** | [`0x6736651c…`](https://explorer-studio.genlayer.com/contracts/0x6736651cFba91AAe4f2eeA5aC83f3E646d49e47B) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0xd1c84d7aaae73562c481276a5b0010b02a4e4c354df04432a9fc85ea48ba91c7) |
-| **NOT FULFILLED** | [`0xE8D52E1f…`](https://explorer-studio.genlayer.com/contracts/0xE8D52E1fdc5Ac0A65D96d3164b67231D795e6847) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0x3f72a4cd50d04bb3b6afa4231f2f422e7f9fb9d310fb9906cba59f941892aa5b) |
+| Verdict | Pact contract | The jury ruling | Escrow went to |
+|---|---|---|---|
+| **FULFILLED** | [`0x82af7CEd…`](https://explorer-studio.genlayer.com/address/0x82af7CEdB9DB8C4c7d8908af3Eec74742F5300E6) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0x5f7c1bd6d13d513e2d79a4c62140f5815545fdeec167113355f6dc291ad5363b) | the party who did the work |
+| **NOT FULFILLED** | [`0x5394b4E6…`](https://explorer-studio.genlayer.com/address/0x5394b4E6cb81835Dd03C1E4E0231B4E8149153CB) | [settle tx ↗](https://explorer-studio.genlayer.com/tx/0xce2a65b6180fcaff6ac464a3d8f5565cdc664780dc388f96c9dc21bf93c814a3) | back to the party who funded it |
 
-**They carry the exact same agreement text.** The only thing that differs is the evidence. Same words, same jury, opposite verdicts. Both are `FINALIZED` with `MAJORITY_AGREE`, and you can see the validator set and their individual votes.
+They are deliberately not the same agreement twice, because between them they have to show two different things.
+
+**They exercise both branches of the contract.** The fulfilled pact filed a text file, so `strict_eq` forced every validator to return byte-identical content before anyone was asked to judge it, and the sha256 of exactly what was judged is on-chain: `ece4444320f7c107…`. The not-fulfilled pact filed an image, where there is no text to agree on, so the commit hash fixes the bytes and each validator looks at the picture itself. Its digest is the commit: `git-commit:cdea3b18f3b3…`.
+
+**They end opposite ways, and the money follows.** Read `paid_to` on each contract. One agreement asked for a real HTML page and got one; the jury's own words are on-chain and the escrow was paid out. The other asked for a logo and explicitly ruled out a portrait; what arrived was an illustrated portrait, the jury said so — *"illustrated portrait of a person with glowing red eyes"* — and the escrow went back. A verdict that moves nothing is an opinion; these two moved the money in opposite directions.
+
+Both are `FINALIZED`, and you can open either transaction and read the validator set and their individual votes.
+
+**If a settle ever comes back with no verdict, that is the design.** GenLayer applies a state change only when the validators reach a majority. When they split, nothing is recorded, nothing is paid, the escrow stays exactly where it was, and settling again draws a new leader. The site reads the vote tally and tells you this in as many words rather than waiting on a transaction that already finished.
 
 There are also two screen recordings of a full pact lifecycle. Both are **downloads, around 29 MB each** — GitHub serves release files rather than streaming them, so they save to your machine and play locally.
 
