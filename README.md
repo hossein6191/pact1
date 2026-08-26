@@ -81,15 +81,6 @@ Both are `FINALIZED`, and you can open either transaction and read the validator
 
 **If a settle ever comes back with no verdict, that is the design.** GenLayer applies a state change only when the validators reach a majority. When they split, nothing is recorded, nothing is paid, the escrow stays exactly where it was, and settling again draws a new leader. The site reads the vote tally and tells you this in as many words rather than waiting on a transaction that already finished.
 
-There are also two screen recordings of a full pact lifecycle. Both are **downloads, around 29 MB each** — GitHub serves release files rather than streaming them, so they save to your machine and play locally.
-
-| Recording | What it shows |
-|---|---|
-| [**fulfilled.mp4** ↓](https://github.com/hossein6191/pact1/releases/download/v1.0/fulfilled.mp4) | Evidence delivered. The jury rules **FULFILLED**. |
-| [**notfulfilled.mp4** ↓](https://github.com/hossein6191/pact1/releases/download/v1.0/notfulfilled.mp4) | The *same* agreement text, evidence missing. The jury rules **NOT FULFILLED**. |
-
-> These four were recorded against the previous version, which chose evidence at drafting time and recorded a verdict without moving funds. They still show the jury reading real evidence and ruling honestly, which is the part that did not change. Replacements built on commit-pinned evidence and live escrow are being recorded.
-
 ---
 
 ## What it does
